@@ -42,6 +42,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 ### Home page `/`
 
 - N/A Featured mock trip was removed; the home page now uses real trip records only.
+- [x] Link previews use a designated branded 1200×630 Roamline Open Graph image instead of allowing messaging apps to scrape the first public trip photo.
 - N/A Mock “Open journey” control was removed with the mock featured trip.
 - [x] Trip cards load real authorized/public trips and open the correct trip.
 - [x] Every trip uses the original cinematic featured-card treatment with an automatically derived asymmetric backdrop of up to five real album photos and a designed no-photo fallback.
@@ -121,7 +122,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [ ] Video play, pause, mute, scrub, duration, and fullscreen controls work.
 - [ ] Missing/deleted media has a graceful unavailable state.
 - [x] Authorized edit action opens the correct media editor.
-- [~] Owners/contributors can long-press manageable media on touch, mouse, or pen to enter one trip-wide multi-select session, then select media across different date groups, see one combined count, clear selection, and request bulk deletion; cross-date non-destructive browser verification is complete and live bulk deletion remains deliberately untested against real trip content.
+- [~] Owners/contributors can long-press manageable media on touch, mouse, or pen to enter one trip-wide multi-select session, then select media across different date groups, see one combined count, clear selection, and request bulk deletion; selection circles stay hidden on touch devices until that first long-press activates selection, then appear on all manageable media across the trip. Cross-date non-destructive browser verification is complete and live bulk deletion remains deliberately untested against real trip content.
 - [x] Bulk delete uses the styled Roamline confirmation and removes selected database rows and private Storage objects.
 
 ### Reactions

@@ -15,9 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://roamline.vercel.app"),
   title: "Roamline — Share the journey",
   description: "A quiet place to share trips, moments, and the road between them.",
   applicationName: "Roamline",
+  openGraph: { title: "Roamline — Share the journey", description: "A quiet place to share trips, moments, and the road between them.", siteName: "Roamline", type: "website" },
+  twitter: { card: "summary_large_image", title: "Roamline — Share the journey", description: "A quiet place to share trips, moments, and the road between them." },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Roamline" },
   formatDetection: { telephone: false },
   icons: { icon: "/roamline-icon.svg", apple: "/roamline-icon.svg" },
