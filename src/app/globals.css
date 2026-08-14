@@ -225,7 +225,7 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 800px) {
   .page-shell { width: min(100% - 30px, 1180px); }
   .site-header { height: 66px; padding-inline: 15px; }
-  .header-search.is-open { position: absolute; left: 62px; right: 15px; width: auto; z-index: 4; background: var(--surface); }.header-search.is-open ~ .header-menu { visibility: hidden; }
+  .header-search.is-open { position: absolute; left: 62px; right: 15px; width: auto; z-index: 4; background: var(--surface); }.header-actions:has(.header-search.is-open) .header-menu { visibility: hidden; }
   .header-actions .text-button, .header-actions .icon-button { display: none; }
   .account-name { display: none; }
   .primary-button { height: 40px; }

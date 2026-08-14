@@ -28,7 +28,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 
 - [x] Roamline logo returns to `/` from every implemented page.
 - [x] Home search expands from the header, filters the currently authorized trip feed by name while typing, shows a no-results state, and clears when closed.
-- [x] The authenticated hamburger menu is the far-right navbar control and contains the account identity, Your trips, All trips, and Sign out; desktop interactions are browser verified.
+- [x] The hamburger sits before Search on desktop and mobile; authenticated menus contain account identity, Your trips, All trips, and Sign out, while signed-out menus expose All trips, Sign in, and Create account.
 - [x] Sign in opens `/login` and changes to authenticated header actions after authentication.
 - [x] New trip is a floating home-page pill—bottom-right on desktop and bottom-center on mobile—and opens `/trips/new`; unauthenticated users are sent through login and returned afterward.
 - [x] The trip library avoids a redundant middle-page New Trip action; creation remains available in the header, empty state, and bottom call-to-action.
