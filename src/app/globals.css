@@ -37,6 +37,8 @@
 .secondary-button { border: 1px solid var(--border); border-radius: 8px; background: white; cursor: pointer; }
 .place-thumbnail { width: 76px; height: 64px; border-radius: 9px; display: grid; place-items: center; background: #f1f0ec center / cover no-repeat; color: var(--subtle); }
 .place-thumbnail.has-photo { box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.place-thumbnail-button { border: 0; padding: 0; border-radius: 9px; background: transparent; cursor: pointer; }.place-thumbnail-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.checkin-select-indicator { display: none; }
 .checkin-attachments { display: grid; gap: 7px; }
 .attachment-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .attachment-list > span { max-width: 100%; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 7px 5px 10px; font-size: 9px; overflow: hidden; }
@@ -365,7 +367,7 @@ a { color: inherit; text-decoration: none; }
 .date-tile strong { font-size: 22px; line-height: 1; font-weight: 550; }.date-tile span { margin-top: 5px; font: 600 9px var(--font-geist-mono), monospace; letter-spacing: .1em; color: var(--accent); }
 .day-heading > div:last-child > span { font: 600 9px var(--font-geist-mono), monospace; letter-spacing: .12em; color: var(--subtle); }
 .day-heading h2 { font-size: 27px; letter-spacing: -.035em; margin: 3px 0; font-weight: 560; }.day-heading p { margin: 0; font-size: 12px; color: var(--muted); }
-.checkin-card { border: 1px solid var(--border); border-radius: 12px; padding: 19px; display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start; margin-bottom: 14px; }
+.checkin-card { position: relative; border: 1px solid var(--border); border-radius: 12px; padding: 19px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; margin-bottom: 14px; }.checkin-main { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }.checkin-copy { min-width: 0; }
 .checkin-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: #f4ece8; color: var(--accent); }
 .moment-time { font: 600 9px var(--font-geist-mono), monospace; letter-spacing: .08em; color: var(--subtle); }.checkin-card h3 { font-size: 16px; margin: 5px 0 4px; }.checkin-card p { color: var(--muted); margin: 0; font-size: 13px; }.more-button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .moment-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 210px; gap: 7px; border-radius: 12px; overflow: hidden; }
@@ -384,7 +386,7 @@ a { color: inherit; text-decoration: none; }
   .journey-intro { padding-top: 44px; padding-bottom: 28px; display: block; }.journey-intro h1 { font-size: 52px; }.journey-people { display: flex; align-items: center; gap: 10px; text-align: left; margin-top: 26px; }.journey-people p { margin: 0; }.avatar-stack { justify-content: start; }
   .map-wrap { width: 100%; height: 350px; border-radius: 0; border-left: 0; border-right: 0; }.map-stop div { display: none; }.map-bottom > span { display: none; }.map-bottom { justify-content: end; }.map-grid:after { width: 65%; }
   .timeline { width: calc(100% - 30px); padding-left: 36px; margin-top: 54px; }.timeline-rail { left: 12px; }.day-heading { margin-left: -36px; }.date-tile { width: 50px; height: 57px; }.day-heading h2 { font-size: 23px; }
-  .checkin-card { padding: 15px; grid-template-columns: auto 1fr; }.more-button { display: none; }.checkin-card p { line-height: 1.5; }
+  .checkin-card { padding: 15px; display: block; cursor: pointer; }.checkin-card .moment-actions { display: none; }.checkin-main { width: 100%; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; }.place-thumbnail-button { margin-top: 0; align-self: center; }.checkin-card.is-selected { border-color: #1677ff; box-shadow: inset 0 0 0 2px #1677ff; background: rgba(22,119,255,.08); }.checkin-select-indicator { position: absolute; z-index: 3; top: 8px; left: 8px; width: 29px; height: 29px; border: 2px solid white; border-radius: 50%; background: rgba(22,119,255,.96); color: white; display: grid; place-items: center; box-shadow: 0 1px 7px rgba(0,0,0,.25); cursor: pointer; }.more-button { display: none; }.checkin-card p { line-height: 1.5; }
   .moment-grid { grid-auto-rows: 145px; }.post-meta > span { display: none; }
   .floating-add { left: 50%; right: auto; transform: translateX(-50%); bottom: 18px; }
   .install-prompt { left: 12px; bottom: 78px; width: calc(100% - 24px); grid-template-columns: 36px 1fr; padding: 14px 44px 14px 14px; }.install-action { grid-column: 1 / -1; width: 100%; }.install-mark { width: 36px; height: 36px; }

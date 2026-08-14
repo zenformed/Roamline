@@ -59,7 +59,3 @@ export function JourneyMap({ points }: { points: JourneyPoint[] }) {
     {error ? <div className="map-error" role="alert">{error}</div> : null}
   </section>;
 }
-
-export function MapFocusButton({ pointId, children }: { pointId: string; children: React.ReactNode }) {
-  return <button className="checkin-focus" type="button" onClick={() => window.dispatchEvent(new CustomEvent("roamline:focus-map", { detail: pointId }))}>{children}</button>;
-}

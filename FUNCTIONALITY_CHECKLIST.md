@@ -86,6 +86,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [x] Denied/unavailable location permission has a Google place-search and manual-coordinate fallback.
 - [~] A check-in can include an optional note and multiple attached photos/videos; the live database migration and picker UI are verified, while a real attachment upload fixture remains.
 - [x] Google Places check-ins display the place's first available Google Maps photo as a thumbnail with a neutral fallback when no photo exists.
+- [~] Clicking a check-in's place thumbnail focuses that stop on the journey map. On mobile, owner-only Edit and Delete icons sit in the card's upper-right corner with accessible labels; desktop retains their full button text. A physical mobile pass remains.
 - [x] Submit displays progress, prevents duplicate submission, and reports errors; a real check-in mutation was browser-verified.
 - [~] Successful creation requests a live route refresh; reliable post-mutation rendering is still being hardened.
 - [~] Trip owners can edit/delete every trip check-in; contributors can manage only check-ins they authored. Browser mutation verification remains.

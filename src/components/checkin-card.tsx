@@ -1,12 +1,12 @@
 "use client";
 
-import { LoaderCircle, MapPin, Pencil, Trash2, X } from "lucide-react";
+import { Check, LoaderCircle, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useRef, useState } from "react";
 
 import { refreshTrip } from "@/app/trip/[slug]/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { MapFocusButton } from "@/components/journey-map";
+import { useMediaSelection } from "@/components/media-selection";
 import { PlaceSearch, SelectedPlace } from "@/components/place-search";
 import { PlaceThumbnail } from "@/components/place-thumbnail";
 import { createClient } from "@/lib/supabase/client";
@@ -16,14 +16,30 @@ function localDateTime(value: string) { const date = new Date(value); return new
 
 export function CheckinCard({ checkin, canManage, slug }: { checkin: Checkin; canManage: boolean; slug: string }) {
   const router = useRouter();
+  const { selected, selecting, toggle } = useMediaSelection();
   const [supabase] = useState(() => createClient());
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const pressTimerRef = useRef<number | null>(null);
+  const longPressedRef = useRef(false);
   const [place, setPlace] = useState({ id: checkin.placeId ?? "", name: checkin.placeName, address: checkin.address ?? "", latitude: String(checkin.latitude), longitude: String(checkin.longitude) });
   const selectPlace = useCallback((next: SelectedPlace) => setPlace({ ...next, latitude: String(next.latitude), longitude: String(next.longitude) }), []);
   async function refresh() { await refreshTrip(slug); router.refresh(); }
+  const selectionItem = { kind: "checkin" as const, id: checkin.id };
+  function isMobile() { return window.matchMedia("(max-width: 800px)").matches; }
+  function beginPress(event: React.PointerEvent<HTMLElement>) {
+    if (!canManage || !isMobile() || (event.target as HTMLElement).closest("button")) return;
+    longPressedRef.current = false;
+    pressTimerRef.current = window.setTimeout(() => { longPressedRef.current = true; toggle(selectionItem); if (navigator.vibrate) navigator.vibrate(25); }, 520);
+  }
+  function endPress() { if (pressTimerRef.current !== null) window.clearTimeout(pressTimerRef.current); pressTimerRef.current = null; }
+  function activateCard(event: React.MouseEvent<HTMLElement>) {
+    if (!canManage || !isMobile() || (event.target as HTMLElement).closest("button")) return;
+    if (longPressedRef.current) { longPressedRef.current = false; return; }
+    if (selecting) toggle(selectionItem); else dialogRef.current?.showModal();
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); const form = new FormData(event.currentTarget);
@@ -42,10 +58,10 @@ export function CheckinCard({ checkin, canManage, slug }: { checkin: Checkin; ca
   }
 
   return <>
-    <article className="checkin-card" id={`checkin-${checkin.id}`}>
-      <PlaceThumbnail placeId={checkin.placeId} name={checkin.placeName} />
-      <div><span className="moment-time">{new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(checkin.occurredAt))} · CHECK-IN</span><h3>{checkin.placeName}</h3>{checkin.note ? <p>{checkin.note}</p> : null}</div>
-      <div className="moment-actions"><MapFocusButton pointId={checkin.id}><MapPin size={15} /> Show on map</MapFocusButton>{canManage ? <><button className="checkin-focus" type="button" onClick={() => dialogRef.current?.showModal()}><Pencil size={14} /> Edit</button><button className="checkin-focus danger" type="button" disabled={busy} onClick={() => setConfirmingDelete(true)}><Trash2 size={14} /> Delete</button></> : null}</div>
+    <article className={`checkin-card${canManage ? " can-manage" : ""}${selected.has(checkin.id) ? " is-selected" : ""}`} id={`checkin-${checkin.id}`} onPointerDown={beginPress} onPointerUp={endPress} onPointerCancel={endPress} onPointerLeave={endPress} onClick={activateCard}>
+      <div className="checkin-main"><button className="place-thumbnail-button" type="button" aria-label={`Show ${checkin.placeName} on map`} title="Show on map" onClick={() => window.dispatchEvent(new CustomEvent("roamline:focus-map", { detail: checkin.id }))}><PlaceThumbnail placeId={checkin.placeId} name={checkin.placeName} /></button><div className="checkin-copy"><span className="moment-time">{new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(checkin.occurredAt))} · CHECK-IN</span><h3>{checkin.placeName}</h3>{checkin.note ? <p>{checkin.note}</p> : null}</div></div>
+      {canManage ? <div className="moment-actions"><button className="checkin-focus" type="button" aria-label="Edit check-in" title="Edit check-in" onClick={() => dialogRef.current?.showModal()}><Pencil size={14} /><span className="checkin-action-label">Edit</span></button><button className="checkin-focus danger" type="button" aria-label="Delete check-in" title="Delete check-in" disabled={busy} onClick={() => setConfirmingDelete(true)}><Trash2 size={14} /><span className="checkin-action-label">Delete</span></button></div> : null}
+      {canManage && selecting ? <button className="checkin-select-indicator" type="button" aria-label={selected.has(checkin.id) ? "Deselect check-in" : "Select check-in"} onClick={() => toggle(selectionItem)}>{selected.has(checkin.id) ? <Check size={15} strokeWidth={3} /> : null}</button> : null}
     </article>
     <ConfirmDialog open={confirmingDelete} busy={busy} title={`Delete ${checkin.placeName}?`} description="This check-in and any photos or videos attached to it will be permanently removed." onCancel={() => setConfirmingDelete(false)} onConfirm={() => void remove()} />
     {canManage ? <dialog className="moment-dialog edit-dialog" ref={dialogRef}><div className="dialog-head"><div><span className="section-kicker">CHECK-IN</span><h2>Edit moment</h2></div><button className="icon-button" type="button" aria-label="Close" onClick={() => dialogRef.current?.close()}><X size={19} /></button></div><form className="checkin-form" onSubmit={save}><label><span>Find a different place</span><PlaceSearch onSelect={selectPlace} /></label><label><span>Place name</span><input required maxLength={180} value={place.name} onChange={(event) => setPlace((current) => ({ ...current, id: "", name: event.target.value }))} /></label><label><span>Address</span><input value={place.address} onChange={(event) => setPlace((current) => ({ ...current, id: "", address: event.target.value }))} /></label><div className="coordinate-grid"><label><span>Latitude</span><input required type="number" min="-90" max="90" step="any" value={place.latitude} onChange={(event) => setPlace((current) => ({ ...current, id: "", latitude: event.target.value }))} /></label><label><span>Longitude</span><input required type="number" min="-180" max="180" step="any" value={place.longitude} onChange={(event) => setPlace((current) => ({ ...current, id: "", longitude: event.target.value }))} /></label></div><label><span>Date and time</span><input name="occurredAt" required type="datetime-local" defaultValue={localDateTime(checkin.occurredAt)} /></label><label><span>Note (optional)</span><textarea name="note" maxLength={1200} defaultValue={checkin.note ?? ""} /></label>{error ? <p className="form-message error" role="alert">{error}</p> : null}<button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Pencil size={16} />} Save changes</button></form></dialog> : null}
