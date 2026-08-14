@@ -28,7 +28,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 
 - [x] Roamline logo returns to `/` from every implemented page.
 - [x] Home search expands from the header, filters the currently authorized trip feed by name while typing, shows a no-results state, and clears when closed.
-- [x] The hamburger sits before Search on desktop and mobile; authenticated menus contain account identity, Your trips, All trips, and Sign out, while signed-out menus expose All trips, Sign in, and Create account.
+- [x] The hamburger is the far-right control after Search on desktop and mobile; authenticated menus contain account identity, Your trips, All trips, and Sign out, while signed-out menus expose All trips, Sign in, and Create account.
 - [x] Sign in opens `/login` and changes to authenticated header actions after authentication.
 - [x] New trip is a floating home-page pill—bottom-right on desktop and bottom-center on mobile—and opens `/trips/new`; unauthenticated users are sent through login and returned afterward.
 - [x] The trip library avoids a redundant middle-page New Trip action; creation remains available in the header, empty state, and bottom call-to-action.
@@ -190,6 +190,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [ ] Web app manifest, icons, theme colors, and standalone mode are valid.
 - [ ] Install prompt works where supported.
 - [x] The app ships a web manifest, standalone metadata, icons, and service worker; eligible Android browsers receive a native Install action, while iPhone users receive Safari Share → Add to Home Screen instructions before notification opt-in.
+- [x] PWA service-worker registration is production-only; local development unregisters stale workers and removes Roamline caches to prevent old client bundles from causing hydration mismatches.
 - [ ] Notification prompt is triggered by a user action, not automatically on page load.
 - [ ] Granted, denied, dismissed, and unsupported permission states are handled.
 - [ ] Push subscriptions are stored per device and trip/member as designed.

@@ -10,6 +10,11 @@ export function PwaInstall() {
   const [ios, setIos] = useState(false);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      if ("serviceWorker" in navigator) void navigator.serviceWorker.getRegistrations().then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())));
+      if ("caches" in window) void caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("roamline-")).map((key) => caches.delete(key))));
+      return;
+    }
     if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js");
     const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone;
     if (standalone || localStorage.getItem("roamline-install-dismissed") === "1") return;
