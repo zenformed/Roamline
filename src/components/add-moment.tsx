@@ -10,6 +10,7 @@ import { refreshTrip } from "@/app/trip/[slug]/actions";
 import { PlaceSearch, SelectedPlace } from "@/components/place-search";
 import { createClient } from "@/lib/supabase/client";
 import { loadGeocoding } from "@/lib/google-maps";
+import { prepareMedia } from "@/lib/media-derivatives";
 
 type Props = { tripId: string; slug: string };
 type UploadItem = {
@@ -134,7 +135,7 @@ export function AddMoment({ tripId, slug }: Props) {
         uploadDataDuringCreation: true,
         removeFingerprintOnSuccess: true,
         chunkSize: 6 * 1024 * 1024,
-        metadata: { bucketName: "trip-media", objectName: path, contentType: file.type, cacheControl: "3600" },
+        metadata: { bucketName: "trip-media", objectName: path, contentType: file.type, cacheControl: "31536000" },
         onProgress: (sent, total) => setItems((current) => current.map((entry) => entry.id === itemId ? { ...entry, progress: Math.round((sent / total) * 100) } : entry)),
         onError: reject,
         onSuccess: () => resolve(),
@@ -152,17 +153,24 @@ export function AddMoment({ tripId, slug }: Props) {
     let completed = 0;
     for (const item of queue) {
       const resolvedPlace = item.placeName.trim() || (item.latitude !== null && item.longitude !== null ? await cityCountry(item.latitude, item.longitude) : "");
-      const extension = item.file.name.includes(".") ? item.file.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
-      const path = `${tripId}/${user.id}/${crypto.randomUUID()}.${extension}`;
+      const mediaId = crypto.randomUUID();
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "uploading", progress: 0, error: undefined } : entry));
       try {
-        if (item.file.size >= RESUMABLE_THRESHOLD) await resumableUpload(item.file, path, item.id);
+        const prepared = await prepareMedia(item.file);
+        const extension = prepared.primary.name.includes(".") ? prepared.primary.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
+        const path = `${tripId}/${user.id}/${mediaId}.${extension}`;
+        const thumbnailPath = prepared.thumbnail ? `${tripId}/${user.id}/${mediaId}-thumb.webp` : null;
+        if (prepared.primary.size >= RESUMABLE_THRESHOLD) await resumableUpload(prepared.primary, path, item.id);
         else {
-          const { error } = await supabase.storage.from("trip-media").upload(path, item.file, { contentType: item.file.type, upsert: false });
+          const { error } = await supabase.storage.from("trip-media").upload(path, prepared.primary, { contentType: prepared.primary.type, cacheControl: "31536000", upsert: false });
           if (error) throw error;
         }
-        const { error } = await supabase.from("media").insert({ trip_id: tripId, uploader_id: user.id, kind: item.file.type.startsWith("video/") ? "video" : "photo", storage_path: path, original_filename: item.file.name, mime_type: item.file.type, width: item.width, height: item.height, duration_seconds: item.duration, caption: item.caption.trim() || null, captured_at: item.capturedAt ? new Date(item.capturedAt).toISOString() : null, place_name: resolvedPlace || null, latitude: item.latitude, longitude: item.longitude, metadata: { source: "browser-upload", originalLastModified: item.file.lastModified } });
-        if (error) { await supabase.storage.from("trip-media").remove([path]); throw error; }
+        if (prepared.thumbnail && thumbnailPath) {
+          const { error } = await supabase.storage.from("trip-media").upload(thumbnailPath, prepared.thumbnail, { contentType: "image/webp", cacheControl: "31536000", upsert: false });
+          if (error) { await supabase.storage.from("trip-media").remove([path]); throw error; }
+        }
+        const { error } = await supabase.from("media").insert({ trip_id: tripId, uploader_id: user.id, kind: item.file.type.startsWith("video/") ? "video" : "photo", storage_path: path, thumbnail_storage_path: thumbnailPath, original_filename: item.file.name, mime_type: prepared.primary.type, width: prepared.width, height: prepared.height, duration_seconds: prepared.duration, caption: item.caption.trim() || null, captured_at: item.capturedAt ? new Date(item.capturedAt).toISOString() : null, place_name: resolvedPlace || null, latitude: item.latitude, longitude: item.longitude, metadata: { source: "browser-upload", originalLastModified: item.file.lastModified, originalBytes: item.file.size, displayBytes: prepared.primary.size, thumbnailBytes: prepared.thumbnail?.size ?? null } });
+        if (error) { await supabase.storage.from("trip-media").remove([path, ...(thumbnailPath ? [thumbnailPath] : [])]); throw error; }
         completed += 1;
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "complete", progress: 100 } : entry));
       } catch (error) {
@@ -187,14 +195,17 @@ export function AddMoment({ tripId, slug }: Props) {
     const { data: checkin, error } = await supabase.from("checkins").insert({ trip_id: tripId, author_id: user.id, place_id: String(form.get("placeId") || "").trim() || null, place_name: String(form.get("placeName") || "").trim(), formatted_address: String(form.get("address") || "").trim() || null, latitude: Number(form.get("latitude")), longitude: Number(form.get("longitude")), occurred_at: occurredAt, note: String(form.get("note") || "").trim() || null }).select("id").single();
     if (error || !checkin) { setBusy(false); setMessage(error?.message ?? "The check-in could not be created."); return; }
     for (const file of checkinFiles) {
-      const extension = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
-      const path = `${tripId}/${user.id}/${crypto.randomUUID()}.${extension}`;
       try {
-        if (file.size >= RESUMABLE_THRESHOLD) await resumableUpload(file, path, "checkin-attachment");
-        else { const result = await supabase.storage.from("trip-media").upload(path, file, { contentType: file.type, upsert: false }); if (result.error) throw result.error; }
-        const size = await dimensions(file);
-        const result = await supabase.from("media").insert({ trip_id: tripId, checkin_id: checkin.id, uploader_id: user.id, kind: file.type.startsWith("video/") ? "video" : "photo", storage_path: path, original_filename: file.name, mime_type: file.type, ...size, captured_at: occurredAt, place_name: selectedPlace.name.trim() || null, latitude: Number(selectedPlace.latitude), longitude: Number(selectedPlace.longitude), metadata: { source: "checkin-attachment", originalLastModified: file.lastModified } });
-        if (result.error) { await supabase.storage.from("trip-media").remove([path]); throw result.error; }
+        const prepared = await prepareMedia(file);
+        const mediaId = crypto.randomUUID();
+        const extension = prepared.primary.name.includes(".") ? prepared.primary.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
+        const path = `${tripId}/${user.id}/${mediaId}.${extension}`;
+        const thumbnailPath = prepared.thumbnail ? `${tripId}/${user.id}/${mediaId}-thumb.webp` : null;
+        if (prepared.primary.size >= RESUMABLE_THRESHOLD) await resumableUpload(prepared.primary, path, "checkin-attachment");
+        else { const result = await supabase.storage.from("trip-media").upload(path, prepared.primary, { contentType: prepared.primary.type, cacheControl: "31536000", upsert: false }); if (result.error) throw result.error; }
+        if (prepared.thumbnail && thumbnailPath) { const result = await supabase.storage.from("trip-media").upload(thumbnailPath, prepared.thumbnail, { contentType: "image/webp", cacheControl: "31536000", upsert: false }); if (result.error) { await supabase.storage.from("trip-media").remove([path]); throw result.error; } }
+        const result = await supabase.from("media").insert({ trip_id: tripId, checkin_id: checkin.id, uploader_id: user.id, kind: file.type.startsWith("video/") ? "video" : "photo", storage_path: path, thumbnail_storage_path: thumbnailPath, original_filename: file.name, mime_type: prepared.primary.type, width: prepared.width, height: prepared.height, duration_seconds: prepared.duration, captured_at: occurredAt, place_name: selectedPlace.name.trim() || null, latitude: Number(selectedPlace.latitude), longitude: Number(selectedPlace.longitude), metadata: { source: "checkin-attachment", originalLastModified: file.lastModified, originalBytes: file.size, displayBytes: prepared.primary.size, thumbnailBytes: prepared.thumbnail?.size ?? null } });
+        if (result.error) { await supabase.storage.from("trip-media").remove([path, ...(thumbnailPath ? [thumbnailPath] : [])]); throw result.error; }
       } catch { /* Keep the check-in even if one attachment fails. */ }
     }
     setBusy(false); setCheckinFiles([]); setSelectedPlace({ id: "", name: "", address: "", latitude: "", longitude: "" }); formElement.reset(); await showLatestTrip(); dialogRef.current?.close();

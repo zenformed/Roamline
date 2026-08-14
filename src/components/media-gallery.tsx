@@ -11,7 +11,7 @@ import { refreshTrip } from "@/app/trip/[slug]/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SelectableMediaGrid } from "@/components/selectable-media-grid";
 
-type MediaItem = { id: string; storagePath: string; url: string; caption: string | null; kind: "photo" | "video"; capturedAt: string | null; placeName: string | null; latitude: number | null; longitude: number | null; reactions: string[]; canManage: boolean };
+type MediaItem = { id: string; storagePath: string; thumbnailStoragePath: string | null; url: string; thumbnailUrl: string; caption: string | null; kind: "photo" | "video"; capturedAt: string | null; placeName: string | null; latitude: number | null; longitude: number | null; reactions: string[]; canManage: boolean };
 type CommentItem = { id: string; body: string; created_at: string; author_id: string; profiles: { display_name: string } | null };
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 
@@ -117,7 +117,7 @@ export function MediaGallery({ items, userId, returnTo, slug }: { items: MediaIt
     setManaging(true); setError("");
     const { error: deleteError } = await supabase.from("media").delete().eq("id", active.id);
     if (deleteError) { setManaging(false); setConfirmingMedia(false); setError(deleteError.message); return; }
-    const { error: storageError } = await supabase.storage.from("trip-media").remove([active.storagePath]);
+    const { error: storageError } = await supabase.storage.from("trip-media").remove([active.storagePath, ...(active.thumbnailStoragePath ? [active.thumbnailStoragePath] : [])]);
     if (storageError) setError("The moment was removed, but its stored file could not be cleaned up.");
     setConfirmingMedia(false); dialogRef.current?.close(); setManaging(false); await refreshTrip(slug); router.refresh();
   }

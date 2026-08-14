@@ -33,11 +33,11 @@ export function CheckinCard({ checkin, canManage, slug }: { checkin: Checkin; ca
 
   async function remove() {
     setBusy(true); setError("");
-    const { data: attachments } = await supabase.from("media").select("storage_path").eq("checkin_id", checkin.id);
+    const { data: attachments } = await supabase.from("media").select("storage_path,thumbnail_storage_path").eq("checkin_id", checkin.id);
     const { error: deleteError } = await supabase.from("checkins").delete().eq("id", checkin.id);
     setBusy(false);
     if (deleteError) { setError(deleteError.message); setConfirmingDelete(false); dialogRef.current?.showModal(); return; }
-    if (attachments?.length) await supabase.storage.from("trip-media").remove(attachments.map((item) => item.storage_path));
+    if (attachments?.length) await supabase.storage.from("trip-media").remove(attachments.flatMap((item) => [item.storage_path, item.thumbnail_storage_path].filter((path): path is string => Boolean(path))));
     setConfirmingDelete(false); await refresh();
   }
 

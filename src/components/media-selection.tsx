@@ -8,7 +8,7 @@ import { refreshTrip } from "@/app/trip/[slug]/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 
-export type SelectableMoment = { id: string; storagePath: string };
+export type SelectableMoment = { id: string; storagePath: string; thumbnailStoragePath: string | null };
 type SelectionContextValue = { selected: Map<string, SelectableMoment>; selecting: boolean; toggle: (item: SelectableMoment) => void; clear: () => void };
 const SelectionContext = createContext<SelectionContextValue | null>(null);
 
@@ -34,7 +34,7 @@ export function MediaSelectionProvider({ slug, children }: { slug: string; child
     setDeleting(true); setError("");
     const { error: deleteError } = await supabase.from("media").delete().in("id", targets.map((item) => item.id));
     if (deleteError) { setDeleting(false); setConfirming(false); setError(deleteError.message); return; }
-    await supabase.storage.from("trip-media").remove(targets.map((item) => item.storagePath));
+    await supabase.storage.from("trip-media").remove(targets.flatMap((item) => [item.storagePath, ...(item.thumbnailStoragePath ? [item.thumbnailStoragePath] : [])]));
     setDeleting(false); setConfirming(false); clear(); await refreshTrip(slug); router.refresh();
   }
 

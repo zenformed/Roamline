@@ -37,6 +37,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [~] The navigation theme toggle persists light/dark preference, honors the system preference on first visit, prevents initial theme flashing, and themes primary pages, cards, forms, dialogs, controls, and empty/error states; desktop home/trip/Add Moment/media-viewer verification is complete and a physical mobile-device pass remains.
 - [x] Floating Add moment and New trip pills invert to white with dark text in dark mode so their labels and icons remain clearly visible.
 - [x] Share uses the native share sheet where supported and a copy-link fallback elsewhere.
+- [~] Trip pages expose only Theme and Hamburger in the visible header; Share, owner-only Invite, trip navigation, and Sign in/out live inside the hamburger on desktop and mobile. Signed-out rendering is verified; an authenticated mobile pass remains.
 - [ ] Follow requests notification permission only after an explanatory prompt and saves the subscription.
 
 ### Home page `/`
@@ -97,6 +98,9 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [~] Each uploaded photo/video offers Google place autocomplete and manual latitude/longitude entry; when no place is selected, approved Google reverse-geocoding converts manual or EXIF GPS coordinates into a stored city/country label used by the timeline and Trip Story. Live EXIF and manual-coordinate fixtures remain to be verified.
 - [x] Supported file types and the 500 MB per-file limit are shown and validated.
 - [x] Uploads use trip/user/UUID object paths with upsert disabled.
+- [~] New photo uploads generate a durable 480px WebP thumbnail and a maximum-2048px WebP display copy in the browser; the full camera original is not retained. Timeline and homepage collages request the thumbnail while the viewer and Trip Story request the display copy. A physical iPhone/Android upload pass, especially HEIC, remains.
+- [~] New video uploads retain the playable source but generate a 480px WebP poster; timeline grids use the poster instead of preloading video data. A physical mobile video upload pass remains.
+- [~] Legacy media without derivatives falls back to its existing original URL; a one-time derivative backfill and optional original cleanup remain before this optimization covers old trips.
 - [x] Files 6 MB and larger use Supabase's TUS resumable upload endpoint.
 - [~] Each file shows extracting, ready, uploading with progress, complete, and failed states; server-side processing is not currently required.
 - [~] Batch upload tracks per-file progress and retries failed items without re-uploading completed items; aggregate progress remains.

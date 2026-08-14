@@ -7,7 +7,7 @@ import { TripLibrary } from "@/components/trip-library";
 import { createClient } from "@/lib/supabase/server";
 
 type TripSummary = { id: string; owner_id: string; slug: string; name: string; description: string | null; start_date: string | null; end_date: string | null; visibility: "public" | "unlisted" | "private"; status: "draft" | "published" | "archived"; published_at: string | null };
-type TripPhoto = { trip_id: string; storage_path: string; caption: string | null; captured_at: string | null; created_at: string };
+type TripPhoto = { trip_id: string; storage_path: string; thumbnail_storage_path: string | null; caption: string | null; captured_at: string | null; created_at: string };
 
 function formatDateRange(start: string | null, end: string | null) {
   if (!start && !end) return "Dates open";
@@ -39,10 +39,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
     const memberIds = new Set((memberships ?? []).map((membership) => membership.trip_id));
     trips = trips.filter((trip) => trip.owner_id === claimsData.claims.sub || memberIds.has(trip.id));
   }
-  const { data: photoData } = trips.length ? await supabase.from("media").select("trip_id,storage_path,caption,captured_at,created_at").in("trip_id", trips.map((trip) => trip.id)).eq("kind", "photo").order("captured_at", { ascending: false, nullsFirst: false }) : { data: [] };
+  const { data: photoData } = trips.length ? await supabase.from("media").select("trip_id,storage_path,thumbnail_storage_path,caption,captured_at,created_at").in("trip_id", trips.map((trip) => trip.id)).eq("kind", "photo").order("captured_at", { ascending: false, nullsFirst: false }) : { data: [] };
   const photos = (photoData ?? []) as TripPhoto[];
   const selectedPhotos = photos.reduce<Map<string, TripPhoto[]>>((map, photo) => { const current = map.get(photo.trip_id) ?? []; if (current.length < 5) { current.push(photo); map.set(photo.trip_id, current); } return map; }, new Map());
-  const paths = [...selectedPhotos.values()].flat().map((photo) => photo.storage_path);
+  const paths = [...selectedPhotos.values()].flat().map((photo) => photo.thumbnail_storage_path ?? photo.storage_path);
   const signedPhotos = paths.length ? await supabase.storage.from("trip-media").createSignedUrls(paths, 3600) : { data: [] };
   const urlByPath = new Map(paths.map((path, index) => [path, signedPhotos.data?.[index]?.signedUrl ?? null]));
 
@@ -52,7 +52,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
     <section className="page-shell" aria-labelledby="trip-library-heading">
       <div className="section-heading"><h2 id="trip-library-heading">{scope === "mine" ? "Your trips" : "All journeys"}</h2></div>
       {error ? <div className="library-state"><h3>Trips couldn’t be loaded</h3><p>Refresh the page to try again.</p></div> : trips.length === 0 ? <div className="library-state"><span className="state-mark"><MapPin size={22} /></span><h3>{scope === "mine" ? "Your travel shelf is ready" : "No public trips yet"}</h3><p>{scope === "mine" ? "Create a journey or accept an invitation to see it here." : "Check back when a new journey begins."}</p>{signedIn ? <Link className="primary-button" href="/trips/new"><Plus size={16} /> Create your first trip</Link> : <Link className="primary-button" href="/login?mode=signup">Create an account <ArrowUpRight size={16} /></Link>}</div> : <TripLibrary>{trips.map((trip, tripIndex) => {
-        const tripPhotos = (selectedPhotos.get(trip.id) ?? []).map((photo) => ({ photo, url: urlByPath.get(photo.storage_path) })).filter((item): item is { photo: TripPhoto; url: string } => Boolean(item.url));
+        const tripPhotos = (selectedPhotos.get(trip.id) ?? []).map((photo) => ({ photo, url: urlByPath.get(photo.thumbnail_storage_path ?? photo.storage_path) })).filter((item): item is { photo: TripPhoto; url: string } => Boolean(item.url));
         const phase = tripPhase(trip);
         return <article className="journey-showcase" data-trip-name={trip.name} key={trip.id}><div className="showcase-heading"><div><span className="section-kicker">{phase.label}</span><h3>{trip.name}</h3></div><Link href={`/trip/${trip.slug}`} className="quiet-link">Open journey <ArrowUpRight size={15} /></Link></div><Link className="featured-trip" href={`/trip/${trip.slug}`}>
           {tripPhotos.length ? <div className={`featured-collage photo-count-${tripPhotos.length}`}>{tripPhotos.map(({ photo, url }, photoIndex) => <div className={`featured-photo featured-photo-${photoIndex + 1}`} key={photo.storage_path}><Image src={url} alt={photo.caption || `${trip.name} trip photo`} fill priority={tripIndex === 0 && photoIndex === 0} sizes="(max-width: 768px) 100vw, 70vw" /></div>)}</div> : <div className="featured-fallback cover-contour" />}

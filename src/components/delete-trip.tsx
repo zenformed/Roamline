@@ -19,11 +19,11 @@ export function DeleteTrip({ tripId, tripName, ownerId }: Props) {
   async function removeTrip() {
     setDeleting(true);
     setError("");
-    const { data: media, error: mediaError } = await supabase.from("media").select("storage_path").eq("trip_id", tripId);
+    const { data: media, error: mediaError } = await supabase.from("media").select("storage_path,thumbnail_storage_path").eq("trip_id", tripId);
     if (mediaError) {
       setDeleting(false); setConfirming(false); setError("Roamline could not prepare this trip for deletion. Please try again."); return;
     }
-    const paths = (media ?? []).map((item) => item.storage_path).filter(Boolean);
+    const paths = (media ?? []).flatMap((item) => [item.storage_path, item.thumbnail_storage_path].filter((path): path is string => Boolean(path)));
     if (paths.length) {
       const { error: storageError } = await supabase.storage.from("trip-media").remove(paths);
       if (storageError) {

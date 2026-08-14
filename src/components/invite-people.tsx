@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 
-export function InvitePeople({ tripId, userId }: { tripId: string; userId: string }) {
+export function InvitePeople({ tripId, userId, menuItem = false }: { tripId: string; userId: string; menuItem?: boolean }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [supabase] = useState(() => createClient());
   const [link, setLink] = useState("");
@@ -27,5 +27,5 @@ export function InvitePeople({ tripId, userId }: { tripId: string; userId: strin
     setCopied(true);
   }
 
-  return <><button className="text-button journey-action" type="button" onClick={() => dialogRef.current?.showModal()}><UserPlus size={16} /> Invite</button><dialog className="invite-dialog" ref={dialogRef}><div className="dialog-head"><div><span className="section-kicker">CONTRIBUTORS</span><h2>Invite someone</h2></div><button className="icon-button" type="button" aria-label="Close invitations" onClick={() => dialogRef.current?.close()}><X size={18} /></button></div><div className="invite-body"><p>Create a private contributor link. Anyone who accepts it can add moments to this trip.</p>{link ? <div className="invite-link"><input readOnly aria-label="Invitation link" value={link} /><button type="button" onClick={() => void copyLink()}>{copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy"}</button></div> : <button className="primary-button" type="button" disabled={busy} onClick={() => void createLink()}>{busy ? <LoaderCircle className="spin" size={16} /> : <UserPlus size={16} />} Create invite link</button>}{error ? <p className="form-message error">{error}</p> : null}<small>Links expire after 30 days. Trip owners can revoke them later.</small></div></dialog></>;
+  return <><button className={menuItem ? "header-menu-action" : "text-button journey-action"} type="button" onClick={() => dialogRef.current?.showModal()}><UserPlus size={16} /> Invite</button><dialog className="invite-dialog" ref={dialogRef}><div className="dialog-head"><div><span className="section-kicker">CONTRIBUTORS</span><h2>Invite someone</h2></div><button className="icon-button" type="button" aria-label="Close invitations" onClick={() => dialogRef.current?.close()}><X size={18} /></button></div><div className="invite-body"><p>Create a private contributor link. Anyone who accepts it can add moments to this trip.</p>{link ? <div className="invite-link"><input readOnly aria-label="Invitation link" value={link} /><button type="button" onClick={() => void copyLink()}>{copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy"}</button></div> : <button className="primary-button" type="button" disabled={busy} onClick={() => void createLink()}>{busy ? <LoaderCircle className="spin" size={16} /> : <UserPlus size={16} />} Create invite link</button>}{error ? <p className="form-message error">{error}</p> : null}<small>Links expire after 30 days. Trip owners can revoke them later.</small></div></dialog></>;
 }
