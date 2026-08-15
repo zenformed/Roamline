@@ -81,6 +81,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const [mode, setMode] = useState<"upload" | "checkin">("upload");
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [publishingIds, setPublishingIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [checkinFiles, setCheckinFiles] = useState<File[]>([]);
   const [selectedPlace, setSelectedPlace] = useState({ id: "", name: "", address: "", latitude: "", longitude: "" });
@@ -149,9 +150,9 @@ export function AddMoment({ tripId, slug }: Props) {
   async function publishUploads() {
     const queue = items.filter((item) => item.status === "ready" || item.status === "failed");
     if (!queue.length) return;
-    setBusy(true); setMessage("");
+    setPublishingIds(queue.map((item) => item.id)); setBusy(true); setMessage("");
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setBusy(false); setMessage("Your session expired. Please sign in again."); return; }
+    if (!user) { setBusy(false); setPublishingIds([]); setMessage("Your session expired. Please sign in again."); return; }
     let completed = 0;
     for (const item of queue) {
       const resolvedPlace = item.placeName.trim() || (item.latitude !== null && item.longitude !== null ? await cityCountry(item.latitude, item.longitude) : "");
@@ -179,7 +180,7 @@ export function AddMoment({ tripId, slug }: Props) {
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error: error instanceof Error ? error.message : "Upload failed." } : entry));
       }
     }
-    setBusy(false);
+    setBusy(false); setPublishingIds([]);
     if (completed) {
       await notifyTripFollowers(tripId, "media", completed);
       await showLatestTrip();
@@ -187,6 +188,12 @@ export function AddMoment({ tripId, slug }: Props) {
       else setMessage(`${completed} of ${queue.length} moments published. Retry the files that failed.`);
     }
   }
+
+  const publishingItems = publishingIds.map((id) => items.find((item) => item.id === id)).filter((item): item is UploadItem => Boolean(item));
+  const publishingComplete = publishingItems.filter((item) => item.status === "complete").length;
+  const publishingFailed = publishingItems.filter((item) => item.status === "failed").length;
+  const publishingProgress = publishingItems.length ? Math.round(publishingItems.reduce((total, item) => total + (item.status === "complete" ? 100 : item.progress), 0) / publishingItems.length) : 0;
+  const publishingCurrent = publishingItems.find((item) => item.status === "uploading");
 
   async function createCheckin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setMessage("");
@@ -217,14 +224,24 @@ export function AddMoment({ tripId, slug }: Props) {
 
   return <>
     <button className="floating-add" type="button" onClick={() => dialogRef.current?.showModal()}><Plus size={17} /> Add moment</button>
-    <dialog className="moment-dialog" ref={dialogRef} onClose={() => setMessage("")}>
-      <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>Add to the journey</h2></div><button className="icon-button" type="button" aria-label="Close" onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
-      <div className="moment-tabs" role="tablist"><button type="button" role="tab" aria-selected={mode === "upload"} onClick={() => setMode("upload")}><ImagePlus size={16} /> Photos & videos</button><button type="button" role="tab" aria-selected={mode === "checkin"} onClick={() => setMode("checkin")}><MapPin size={16} /> Check in</button></div>
+    <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setMessage("")}>
+      <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Add to the journey"}</h2></div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
+      {!publishingIds.length ? <div className="moment-tabs" role="tablist"><button type="button" role="tab" aria-selected={mode === "upload"} onClick={() => setMode("upload")}><ImagePlus size={16} /> Photos & videos</button><button type="button" role="tab" aria-selected={mode === "checkin"} onClick={() => setMode("checkin")}><MapPin size={16} /> Check in</button></div> : null}
       {mode === "upload" ? <div>
-        <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}><Upload size={22} /><strong>Choose photos or videos</strong><span>Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each</span></button>
-        <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
-        <div className="upload-list">{items.map((item) => <article className="upload-item" key={item.id}><div className="upload-status">{item.status === "complete" ? <Check size={17} /> : item.status === "extracting" || item.status === "uploading" ? <LoaderCircle className="spin" size={17} /> : <ImagePlus size={17} />}</div><div><strong>{item.file.name}</strong><span>{(item.file.size / 1024 / 1024).toFixed(1)} MB · {item.latitude === null ? "No GPS metadata" : "GPS found"} · {item.status}{item.status === "uploading" ? ` ${item.progress}%` : ""}</span><div className="upload-fields"><input aria-label={`Caption for ${item.file.name}`} placeholder="Caption (optional)" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /><input aria-label={`Capture time for ${item.file.name}`} type="datetime-local" value={item.capturedAt} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: event.target.value } : entry))} /></div><div className="upload-location-editor"><PlaceSearch key={`${item.id}-${item.placeName}`} compact showCurrentLocation={false} initialQuery={item.placeName} placeholder="Search for the place…" onSelect={(place) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, placeName: place.name, latitude: place.latitude, longitude: place.longitude } : entry))} /><div className="upload-coordinates"><input aria-label={`Latitude for ${item.file.name}`} type="number" min="-90" max="90" step="any" placeholder="Latitude" value={item.latitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, latitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /><input aria-label={`Longitude for ${item.file.name}`} type="number" min="-180" max="180" step="any" placeholder="Longitude" value={item.longitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, longitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /></div>{item.placeName ? <small className="resolved-place"><MapPin size={12} /> {item.placeName}</small> : item.latitude !== null && item.longitude !== null ? <small className="resolved-place">City and country will be resolved from these coordinates.</small> : null}</div>{item.error ? <span className="item-error">{item.error}</span> : null}</div><button className="icon-button" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}><X size={16} /></button></article>)}</div>
-        {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>{busy ? <LoaderCircle className="spin" size={16} /> : null} Publish ready files</button> : null}
+        {publishingIds.length ? <section className="upload-progress-panel" aria-live="polite">
+          <div className="upload-progress-icon"><Upload size={22} /></div>
+          <span className="section-kicker">UPLOADING YOUR JOURNEY</span>
+          <div className="upload-progress-heading"><strong>{publishingComplete} of {publishingIds.length} complete</strong><span>{publishingProgress}%</span></div>
+          <progress max="100" value={publishingProgress} aria-label={`Upload progress: ${publishingProgress}%`} />
+          <p>{publishingCurrent ? `Uploading ${publishingCurrent.file.name}` : "Preparing the next file…"}</p>
+          {publishingFailed ? <small>{publishingFailed} {publishingFailed === 1 ? "file has" : "files have"} failed. You can retry after the remaining uploads finish.</small> : null}
+          <span className="upload-stay-open">Keep Roamline open until publishing is complete.</span>
+        </section> : <>
+          <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}><Upload size={22} /><strong>Choose photos or videos</strong><span>Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each</span></button>
+          <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
+          <div className="upload-list">{items.map((item) => <article className="upload-item" key={item.id}><div className="upload-status">{item.status === "complete" ? <Check size={17} /> : item.status === "extracting" || item.status === "uploading" ? <LoaderCircle className="spin" size={17} /> : <ImagePlus size={17} />}</div><div><strong>{item.file.name}</strong><span>{(item.file.size / 1024 / 1024).toFixed(1)} MB · {item.latitude === null ? "No GPS metadata" : "GPS found"} · {item.status}{item.status === "uploading" ? ` ${item.progress}%` : ""}</span><div className="upload-fields"><input aria-label={`Caption for ${item.file.name}`} placeholder="Caption (optional)" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /><input aria-label={`Capture time for ${item.file.name}`} type="datetime-local" value={item.capturedAt} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: event.target.value } : entry))} /></div><div className="upload-location-editor"><PlaceSearch key={`${item.id}-${item.placeName}`} compact showCurrentLocation={false} initialQuery={item.placeName} placeholder="Search for the place…" onSelect={(place) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, placeName: place.name, latitude: place.latitude, longitude: place.longitude } : entry))} /><div className="upload-coordinates"><input aria-label={`Latitude for ${item.file.name}`} type="number" min="-90" max="90" step="any" placeholder="Latitude" value={item.latitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, latitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /><input aria-label={`Longitude for ${item.file.name}`} type="number" min="-180" max="180" step="any" placeholder="Longitude" value={item.longitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, longitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /></div>{item.placeName ? <small className="resolved-place"><MapPin size={12} /> {item.placeName}</small> : item.latitude !== null && item.longitude !== null ? <small className="resolved-place">City and country will be resolved from these coordinates.</small> : null}</div>{item.error ? <span className="item-error">{item.error}</span> : null}</div><button className="icon-button" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}><X size={16} /></button></article>)}</div>
+          {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>Publish ready files</button> : null}
+        </>}
       </div> : <form className="checkin-form" onSubmit={createCheckin}>
         <label><span>Find a place</span><PlaceSearch onSelect={selectPlace} /></label>
         <input type="hidden" name="placeId" value={selectedPlace.id} />

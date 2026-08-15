@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import Script from "next/script";
 import "./globals.css";
 import { PwaInstall } from "@/components/pwa-install";
@@ -26,13 +27,17 @@ export const metadata: Metadata = {
   icons: { icon: "/roamline-icon.svg", apple: "/roamline-icon.svg" },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  const themeScript = `(function(){try{var saved=localStorage.getItem('roamline-theme');var theme=saved||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme}catch(e){}})()`;
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const savedTheme = (await cookies()).get("roamline-theme")?.value;
+  const serverTheme = savedTheme === "dark" || savedTheme === "light" ? savedTheme : undefined;
+  const themeScript = `(function(){try{var stored=localStorage.getItem('roamline-theme');var cookie=document.cookie.match(/(?:^|; )roamline-theme=(dark|light)(?:;|$)/);var saved=stored||(cookie&&cookie[1]);var theme=saved||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;document.cookie='roamline-theme='+theme+'; Path=/; Max-Age=31536000; SameSite=Lax'}catch(e){}})()`;
   return (
     <html
       lang="en"
+      data-theme={serverTheme}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
+      style={serverTheme ? { colorScheme: serverTheme } : undefined}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col"><Script id="roamline-theme" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeScript }} />{children}<PwaInstall /></body>
