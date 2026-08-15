@@ -76,7 +76,7 @@ export function FollowTrip({ tripId, slug, signedIn, initialFollowing, initialNo
       const json = subscription.toJSON();
       if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) throw new Error("The notification subscription was incomplete.");
       stage = "saving the phone subscription";
-      const { error: subscriptionError } = await supabase.rpc("save_push_subscription", { subscription_endpoint: json.endpoint, subscription_p256dh: json.keys.p256dh, subscription_auth: json.keys.auth, subscription_user_agent: navigator.userAgent });
+      const { error: subscriptionError } = await supabase.rpc("save_push_subscription", { subscription_trip_id: tripId, subscription_endpoint: json.endpoint, subscription_p256dh: json.keys.p256dh, subscription_auth: json.keys.auth, subscription_user_agent: navigator.userAgent });
       if (subscriptionError) throw subscriptionError;
       stage = "enabling notifications for this trip";
       const { error: followError } = await supabase.from("trip_follows").update({ notifications_enabled: true, updated_at: new Date().toISOString() }).eq("trip_id", tripId);
