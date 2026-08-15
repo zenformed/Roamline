@@ -21,6 +21,12 @@ function applicationServerKey(value: string) {
   return Uint8Array.from(window.atob(base64), (character) => character.charCodeAt(0));
 }
 
+function notificationErrorMessage(value: unknown) {
+  if (value instanceof Error) return value.message;
+  if (value && typeof value === "object" && "message" in value && typeof value.message === "string") return value.message;
+  return String(value || "Unknown notification error");
+}
+
 export function FollowTrip({ tripId, slug, signedIn, initialFollowing, initialNotifications, vapidPublicKey }: Props) {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
@@ -57,21 +63,30 @@ export function FollowTrip({ tripId, slug, signedIn, initialFollowing, initialNo
     if (!vapidPublicKey) { setError("Notifications are not configured on this deployment yet."); return; }
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setError("Push notifications are not supported here. On iPhone, add Roamline to your Home Screen first."); return; }
     setBusy(true); setError("");
+    let stage = "requesting notification permission";
     try {
       const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
       if (permission !== "granted") throw new Error("Notifications were not allowed. You can enable them later with the bell button.");
+      stage = "starting the notification service";
       const registration = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
+      stage = "creating the phone subscription";
       const existing = await registration.pushManager.getSubscription();
       const subscription = existing ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationServerKey(vapidPublicKey) });
       const json = subscription.toJSON();
       if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) throw new Error("The notification subscription was incomplete.");
+      stage = "saving the phone subscription";
       const { error: subscriptionError } = await supabase.rpc("save_push_subscription", { subscription_endpoint: json.endpoint, subscription_p256dh: json.keys.p256dh, subscription_auth: json.keys.auth, subscription_user_agent: navigator.userAgent });
       if (subscriptionError) throw subscriptionError;
+      stage = "enabling notifications for this trip";
       const { error: followError } = await supabase.from("trip_follows").update({ notifications_enabled: true, updated_at: new Date().toISOString() }).eq("trip_id", tripId);
       if (followError) throw followError;
       setNotifications(true); dialogRef.current?.close();
-    } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "Notifications could not be enabled."); }
+    } catch (nextError) {
+      const detail = notificationErrorMessage(nextError);
+      console.error("[notifications] enable failed", { stage, detail });
+      setError(`Could not finish ${stage}: ${detail}`);
+    }
     finally { setBusy(false); }
   }
 
