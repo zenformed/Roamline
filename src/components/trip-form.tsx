@@ -4,12 +4,15 @@ import { useActionState, useState } from "react";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { updateTrip } from "@/app/trip/[slug]/edit/actions";
 import { createTrip, type TripFormState } from "@/app/trips/new/actions";
+import { InvitePeople } from "@/components/invite-people";
 
 const initialState: TripFormState = {};
 type InitialTrip = { id: string; name: string; slug: string; description: string; startDate: string; endDate: string; visibility: string };
+type Collaborator = { id: string; displayName: string };
+type Invitation = { id: string; token: string; expiresAt: string };
 function toSlug(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 
-export function TripForm({ mode = "create", initialData }: { mode?: "create" | "edit"; initialData?: InitialTrip }) {
+export function TripForm({ mode = "create", initialData, ownerId, collaborators = [], invitations = [] }: { mode?: "create" | "edit"; initialData?: InitialTrip; ownerId?: string; collaborators?: Collaborator[]; invitations?: Invitation[] }) {
   const [state, action, pending] = useActionState(mode === "edit" ? updateTrip : createTrip, initialState);
   const [slug, setSlug] = useState(initialData?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(mode === "edit");
@@ -21,6 +24,7 @@ export function TripForm({ mode = "create", initialData }: { mode?: "create" | "
       <label><span>Starts</span><input name="startDate" type="date" defaultValue={initialData?.startDate} /></label>
       <label><span>Ends</span><input name="endDate" type="date" defaultValue={initialData?.endDate} /></label>
       <label className="field-wide"><span>Description</span><textarea name="description" rows={4} maxLength={1200} placeholder="A few words about this journey…" defaultValue={initialData?.description} /></label>
+      {mode === "edit" && initialData && ownerId ? <InvitePeople tripId={initialData.id} userId={ownerId} collaborators={collaborators} invitations={invitations} inline /> : null}
       <fieldset className="field-wide visibility-options"><legend>Who can see this trip?</legend>
         <label><input type="radio" name="visibility" value="public" defaultChecked={!initialData || initialData.visibility === "public"} /><span><strong>Public</strong><small>Anyone can follow the trip and it appears on your trip shelf.</small></span></label>
         <label><input type="radio" name="visibility" value="unlisted" defaultChecked={initialData?.visibility === "unlisted"} /><span><strong>Link only</strong><small>Anyone with the journey link can view it, but it stays off the public shelf.</small></span></label>

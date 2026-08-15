@@ -26,7 +26,15 @@ async function drawImage(source: CanvasImageSource, sourceWidth: number, sourceH
 }
 
 async function preparePhoto(file: File): Promise<PreparedMedia> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const heicByName = /\.hei[cf]$/i.test(file.name);
+  const heicByType = file.type === "image/heic" || file.type === "image/heif";
+  let bitmap: ImageBitmap;
+  if (heicByName || heicByType) {
+    const { heicTo } = await import("heic-to/next");
+    bitmap = await heicTo({ blob: file, type: "bitmap", options: { imageOrientation: "from-image" } });
+  } else {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  }
   try {
     const display = await drawImage(bitmap, bitmap.width, bitmap.height, PHOTO_DISPLAY_MAX_PX, .84);
     const thumb = await drawImage(bitmap, bitmap.width, bitmap.height, MEDIA_THUMBNAIL_MAX_PX, .76);

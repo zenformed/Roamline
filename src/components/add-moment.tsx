@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 
-import { refreshTrip } from "@/app/trip/[slug]/actions";
+import { notifyTripFollowers, refreshTrip } from "@/app/trip/[slug]/actions";
 import { PlaceSearch, SelectedPlace } from "@/components/place-search";
 import { createClient } from "@/lib/supabase/client";
 import { loadGeocoding } from "@/lib/google-maps";
@@ -32,6 +32,8 @@ type UploadItem = {
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "video/mp4", "video/quicktime"]);
+const ACCEPTED_EXTENSIONS = /\.(?:jpe?g|png|webp|hei[cf]|mp4|mov)$/i;
+const isAcceptedFile = (file: File) => ACCEPTED_TYPES.has(file.type) || (!file.type && ACCEPTED_EXTENSIONS.test(file.name));
 
 function localDateTime(value?: Date | string | number | null) {
   const date = value ? new Date(value) : new Date();
@@ -90,7 +92,7 @@ export function AddMoment({ tripId, slug }: Props) {
   }
 
   async function addFiles(files: FileList | File[]) {
-    const accepted = [...files].filter((file) => ACCEPTED_TYPES.has(file.type));
+    const accepted = [...files].filter(isAcceptedFile);
     if (accepted.length !== files.length) setMessage("Some files were skipped because their format is not supported.");
     const initial = accepted.map((file) => ({ id: crypto.randomUUID(), file, status: "extracting" as const, progress: 0, caption: "", capturedAt: localDateTime(file.lastModified), latitude: null, longitude: null, placeName: "", width: null, height: null, duration: null }));
     setItems((current) => [...current, ...initial]);
@@ -179,6 +181,7 @@ export function AddMoment({ tripId, slug }: Props) {
     }
     setBusy(false);
     if (completed) {
+      await notifyTripFollowers(tripId, "media", completed);
       await showLatestTrip();
       if (completed === queue.length) { setItems([]); dialogRef.current?.close(); }
       else setMessage(`${completed} of ${queue.length} moments published. Retry the files that failed.`);
@@ -208,6 +211,7 @@ export function AddMoment({ tripId, slug }: Props) {
         if (result.error) { await supabase.storage.from("trip-media").remove([path, ...(thumbnailPath ? [thumbnailPath] : [])]); throw result.error; }
       } catch { /* Keep the check-in even if one attachment fails. */ }
     }
+    await notifyTripFollowers(tripId, "checkin");
     setBusy(false); setCheckinFiles([]); setSelectedPlace({ id: "", name: "", address: "", latitude: "", longitude: "" }); formElement.reset(); await showLatestTrip(); dialogRef.current?.close();
   }
 
@@ -218,7 +222,7 @@ export function AddMoment({ tripId, slug }: Props) {
       <div className="moment-tabs" role="tablist"><button type="button" role="tab" aria-selected={mode === "upload"} onClick={() => setMode("upload")}><ImagePlus size={16} /> Photos & videos</button><button type="button" role="tab" aria-selected={mode === "checkin"} onClick={() => setMode("checkin")}><MapPin size={16} /> Check in</button></div>
       {mode === "upload" ? <div>
         <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}><Upload size={22} /><strong>Choose photos or videos</strong><span>Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each</span></button>
-        <input ref={inputRef} hidden type="file" accept="image/*,video/*" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
+        <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
         <div className="upload-list">{items.map((item) => <article className="upload-item" key={item.id}><div className="upload-status">{item.status === "complete" ? <Check size={17} /> : item.status === "extracting" || item.status === "uploading" ? <LoaderCircle className="spin" size={17} /> : <ImagePlus size={17} />}</div><div><strong>{item.file.name}</strong><span>{(item.file.size / 1024 / 1024).toFixed(1)} MB · {item.latitude === null ? "No GPS metadata" : "GPS found"} · {item.status}{item.status === "uploading" ? ` ${item.progress}%` : ""}</span><div className="upload-fields"><input aria-label={`Caption for ${item.file.name}`} placeholder="Caption (optional)" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /><input aria-label={`Capture time for ${item.file.name}`} type="datetime-local" value={item.capturedAt} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: event.target.value } : entry))} /></div><div className="upload-location-editor"><PlaceSearch key={`${item.id}-${item.placeName}`} compact showCurrentLocation={false} initialQuery={item.placeName} placeholder="Search for the place…" onSelect={(place) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, placeName: place.name, latitude: place.latitude, longitude: place.longitude } : entry))} /><div className="upload-coordinates"><input aria-label={`Latitude for ${item.file.name}`} type="number" min="-90" max="90" step="any" placeholder="Latitude" value={item.latitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, latitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /><input aria-label={`Longitude for ${item.file.name}`} type="number" min="-180" max="180" step="any" placeholder="Longitude" value={item.longitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, longitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /></div>{item.placeName ? <small className="resolved-place"><MapPin size={12} /> {item.placeName}</small> : item.latitude !== null && item.longitude !== null ? <small className="resolved-place">City and country will be resolved from these coordinates.</small> : null}</div>{item.error ? <span className="item-error">{item.error}</span> : null}</div><button className="icon-button" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}><X size={16} /></button></article>)}</div>
         {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>{busy ? <LoaderCircle className="spin" size={16} /> : null} Publish ready files</button> : null}
       </div> : <form className="checkin-form" onSubmit={createCheckin}>
@@ -229,7 +233,7 @@ export function AddMoment({ tripId, slug }: Props) {
         <div className="coordinate-grid"><label><span>Latitude</span><input name="latitude" required type="number" min="-90" max="90" step="any" placeholder="35.6984" value={selectedPlace.latitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", latitude: event.target.value }))} /></label><label><span>Longitude</span><input name="longitude" required type="number" min="-180" max="180" step="any" placeholder="139.7731" value={selectedPlace.longitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", longitude: event.target.value }))} /></label></div>
         <label><span>Date and time</span><input name="occurredAt" required type="datetime-local" defaultValue={localDateTime()} /></label>
         <label><span>Note (optional)</span><textarea name="note" maxLength={1200} placeholder="What happened here?" /></label>
-        <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => ACCEPTED_TYPES.has(file.type) && file.size <= MAX_FILE_SIZE)]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
+        <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => isAcceptedFile(file) && file.size <= MAX_FILE_SIZE)]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>
       </form>}
       {message ? <p className={`dialog-message ${message === "Check-in added." || message.includes("published") ? "success" : ""}`} role="status">{message}</p> : null}

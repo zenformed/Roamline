@@ -27,7 +27,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 ### Global header
 
 - [x] Roamline logo returns to `/` from every implemented page.
-- [x] Home search expands from the header, filters the currently authorized trip feed by name while typing, shows a no-results state, and clears when closed.
+- [x] Home search expands from the header, debounces name search into a database query, resets pagination, preserves scope in the URL, shows a no-results state, and clears both the field and URL when closed.
 - [x] The hamburger is the far-right control after Search on desktop and mobile; authenticated menus contain account identity, Your trips, All trips, and Sign out, while signed-out menus expose All trips, Sign in, and Create account.
 - [x] Sign in opens `/login` and changes to authenticated header actions after authentication.
 - [x] New trip is a floating home-page pill—bottom-right on desktop and bottom-center on mobile—and opens `/trips/new`; unauthenticated users are sent through login and returned afterward.
@@ -36,7 +36,8 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [x] The primary navigation remains sticky at the top across home, trip, and form pages with a translucent backdrop and mobile-safe spacing.
 - [~] The navigation theme toggle persists light/dark preference, honors the system preference on first visit, prevents initial theme flashing, and themes primary pages, cards, forms, dialogs, controls, and empty/error states; desktop home/trip/Add Moment/media-viewer verification is complete and a physical mobile-device pass remains.
 - [x] Floating Add moment and New trip pills invert to white with dark text in dark mode so their labels and icons remain clearly visible.
-- [x] Share uses the native share sheet where supported and a copy-link fallback elsewhere.
+- [x] Share is view-only and uses the native share sheet where supported with a copy-link fallback; private trips require owner confirmation before becoming link-only.
+- [x] Add people is separate from Share, creates contributor invitation links, lists active collaborators/invitations, and supports removing people or revoking unused links.
 - [~] Trip pages expose only Theme and Hamburger in the visible header; Share, owner-only Invite, trip navigation, and Sign in/out live inside the hamburger on desktop and mobile. Signed-out rendering is verified; an authenticated mobile pass remains.
 - [ ] Follow requests notification permission only after an explanatory prompt and saves the subscription.
 
@@ -49,6 +50,8 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [x] Every trip uses the original cinematic featured-card treatment with an automatically derived asymmetric backdrop of up to five real album photos and a designed no-photo fallback.
 - [~] Public and private access rules are verified; remaining status/date filtering is not yet implemented.
 - [x] Home defaults strictly to public journeys in reverse chronological trip-date order; private and link-only journeys are excluded even for signed-in viewers, while the account menu switches to an owner/member-only Your trips view.
+- [~] Signed-in non-owners can follow/unfollow an accessible trip; followed trips join the existing Your trips feed alongside owned/collaborated trips. The live schema is applied and a second-account mutation pass remains.
+- [x] Home uses true server/database pagination at 10 trips per page with exact range/count chrome, bounded previous/next navigation, canonical handling of out-of-range pages, and URL-preserved search/scope. Each rendered trip requests at most five collage photos plus its moment count; supporting database indexes are captured in migration `202608140004_optimize_home_pagination.sql`.
 - [x] “Start a new trip” opens the trip creation flow.
 - [x] Empty trip-library state provides working create/sign-in actions.
 - [ ] Loading and database-error states have retry behavior.
@@ -86,7 +89,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [x] Denied/unavailable location permission has a Google place-search and manual-coordinate fallback.
 - [~] A check-in can include an optional note and multiple attached photos/videos; the live database migration and picker UI are verified, while a real attachment upload fixture remains.
 - [x] Google Places check-ins display the place's first available Google Maps photo as a thumbnail with a neutral fallback when no photo exists.
-- [~] Clicking a check-in's place thumbnail focuses that stop on the journey map. On mobile, owner-only Edit and Delete icons sit in the card's upper-right corner with accessible labels; desktop retains their full button text. A physical mobile pass remains.
+- [~] Clicking a check-in's place thumbnail focuses that stop on the journey map. On mobile, tapping the rest of a manageable card opens Edit, while long-press enters the trip-wide selection mode for bulk deletion across check-ins, photos, videos, and dates; desktop retains explicit Edit/Delete buttons. A physical mobile pass remains.
 - [x] Submit displays progress, prevents duplicate submission, and reports errors; a real check-in mutation was browser-verified.
 - [~] Successful creation requests a live route refresh; reliable post-mutation rendering is still being hardened.
 - [~] Trip owners can edit/delete every trip check-in; contributors can manage only check-ins they authored. Browser mutation verification remains.
@@ -99,7 +102,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [~] Each uploaded photo/video offers Google place autocomplete and manual latitude/longitude entry; when no place is selected, approved Google reverse-geocoding converts manual or EXIF GPS coordinates into a stored city/country label used by the timeline and Trip Story. Live EXIF and manual-coordinate fixtures remain to be verified.
 - [x] Supported file types and the 500 MB per-file limit are shown and validated.
 - [x] Uploads use trip/user/UUID object paths with upsert disabled.
-- [~] New photo uploads generate a durable 480px WebP thumbnail and a maximum-2048px WebP display copy in the browser; the full camera original is not retained. Timeline and homepage collages request the thumbnail while the viewer and Trip Story request the display copy. A physical iPhone/Android upload pass, especially HEIC, remains.
+- [~] New photo uploads—including HEIC/HEIF decoded locally in the browser—generate a durable 480px WebP thumbnail and a maximum-2048px WebP display copy; the full camera original is not retained. Timeline and homepage collages request the thumbnail while the viewer and Trip Story request the display copy. A physical iPhone/Android HEIC upload pass remains.
 - [~] New video uploads retain the playable source but generate a 480px WebP poster; timeline grids use the poster instead of preloading video data. A physical mobile video upload pass remains.
 - [~] Legacy media without derivatives falls back to its existing original URL; a one-time derivative backfill and optional original cleanup remain before this optimization covers old trips.
 - [x] Files 6 MB and larger use Supabase's TUS resumable upload endpoint.
@@ -198,15 +201,15 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [ ] Install prompt works where supported.
 - [x] The app ships a web manifest, standalone metadata, icons, and service worker; eligible Android browsers receive a native Install action, while iPhone users receive Safari Share → Add to Home Screen instructions before notification opt-in.
 - [x] PWA service-worker registration is production-only; local development unregisters stale workers and removes Roamline caches to prevent old client bundles from causing hydration mismatches.
-- [ ] Notification prompt is triggered by a user action, not automatically on page load.
-- [ ] Granted, denied, dismissed, and unsupported permission states are handled.
-- [ ] Push subscriptions are stored per device and trip/member as designed.
-- [ ] New check-in notification opens the correct trip/check-in.
-- [ ] New media-batch notification opens the correct trip/day.
-- [ ] Batch uploads produce one useful notification, not one per file.
-- [ ] Users can independently toggle check-in and media-batch notifications.
-- [ ] Unfollow removes or disables the correct subscription.
-- [ ] Expired push subscriptions are cleaned up after delivery failures.
+- [x] Notification permission is requested only after Follow and an explanatory Roamline prompt, or a later explicit bell-button action—never automatically on page load.
+- [~] Granted, denied, dismissed, unsupported-browser, and iPhone-not-installed states are handled in UI; physical device verification remains.
+- [~] Push subscriptions are stored per account/device through an authenticated security-definer RPC, while notification preference is stored per followed trip; physical subscription verification remains.
+- [~] New check-in notifications open the correct trip; exact check-in scrolling is not included in the current trip-update requirement.
+- [~] New media-batch notifications open the correct trip; exact day scrolling is not included in the current trip-update requirement.
+- [x] Batch uploads invoke one follower broadcast with a useful aggregate moment count, not one notification per file.
+- N/A Check-in and media notifications currently use one per-trip bell preference, matching the requested Follow flow rather than separate category toggles.
+- [~] Unfollow deletes the trip preference and disables future broadcasts for that trip without removing a device subscription that may serve other followed trips; second-account verification remains.
+- [~] Push endpoints returning 404/410 are removed after delivery failures through an authenticated cleanup RPC; live expired-endpoint verification remains.
 
 ### Accessibility and interaction quality
 

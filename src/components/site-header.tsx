@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HeaderNavigation } from "@/components/header-navigation";
 
-export async function SiteHeader({ searchable = false }: { searchable?: boolean }) {
+export async function SiteHeader({ searchable = false, searchQuery = "" }: { searchable?: boolean; searchQuery?: string }) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
@@ -26,7 +26,7 @@ export async function SiteHeader({ searchable = false }: { searchable?: boolean 
       </Link>
       <nav className="header-actions" aria-label="Primary navigation">
         <ThemeToggle />
-        <HeaderNavigation signedIn={Boolean(claims)} displayName={displayName ?? claims?.email ?? null} searchable={searchable} />
+        <HeaderNavigation key={searchQuery} signedIn={Boolean(claims)} displayName={displayName ?? claims?.email ?? null} searchable={searchable} initialSearch={searchQuery} />
       </nav>
     </header>
   );
