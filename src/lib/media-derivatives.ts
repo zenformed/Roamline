@@ -9,6 +9,10 @@ type PreparedMedia = {
   duration: number | null;
 };
 
+type PrepareMediaOptions = {
+  onProgress?: (progress: number) => void;
+};
+
 function canvasBlob(canvas: HTMLCanvasElement, quality: number) {
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Image conversion failed.")), "image/webp", quality));
 }
@@ -47,7 +51,45 @@ async function preparePhoto(file: File): Promise<PreparedMedia> {
   } finally { bitmap.close(); }
 }
 
-async function prepareVideo(file: File): Promise<PreparedMedia> {
+async function compressVideo(file: File, onProgress?: (progress: number) => void) {
+  const [{ ALL_FORMATS, BlobSource, BufferTarget, Conversion, Input, Mp4OutputFormat, Output, canEncodeAudio }, { registerAacEncoder }] = await Promise.all([
+    import("mediabunny"),
+    import("@mediabunny/aac-encoder"),
+  ]);
+  if (!(await canEncodeAudio("aac"))) registerAacEncoder();
+
+  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+  const target = new BufferTarget();
+  const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target });
+  const conversion = await Conversion.init({
+    input,
+    output,
+    tracks: "primary",
+    video: async (track) => {
+      const width = await track.getDisplayWidth();
+      const height = await track.getDisplayHeight();
+      return {
+        ...(width >= height ? { height: Math.min(height, 720) } : { width: Math.min(width, 720) }),
+        codec: "avc",
+        bitrate: 1_500_000,
+        frameRate: 30,
+        keyFrameInterval: 2,
+        forceTranscode: true,
+        hardwareAcceleration: "prefer-hardware",
+      };
+    },
+    audio: { codec: "aac", bitrate: 96_000, numberOfChannels: 2, forceTranscode: true },
+    tags: {},
+  });
+  if (!conversion.isValid) throw new Error("Video compression is not supported on this device.");
+  conversion.onProgress = (progress) => onProgress?.(Math.round(progress * 100));
+  await conversion.execute();
+  if (!target.buffer) throw new Error("Video compression did not produce a file.");
+  const stem = file.name.replace(/\.[^.]+$/, "") || "video";
+  return new File([target.buffer], `${stem}.mp4`, { type: "video/mp4", lastModified: file.lastModified });
+}
+
+async function prepareVideo(file: File, options?: PrepareMediaOptions): Promise<PreparedMedia> {
   const url = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
@@ -80,11 +122,14 @@ async function prepareVideo(file: File): Promise<PreparedMedia> {
         thumbnail = new File([thumb.blob], `${stem}-thumb.webp`, { type: "image/webp", lastModified: file.lastModified });
       } catch { /* A poster is optional; never block the video upload. */ }
     }
-    return { primary: file, thumbnail, width, height, duration };
+    const compressed = await compressVideo(file, options?.onProgress);
+    const primary = compressed.size < file.size ? compressed : file;
+    if (primary.size > 50 * 1024 * 1024) throw new Error("Compressed video is too large. Maximum size is 50 MB.");
+    return { primary, thumbnail, width, height, duration };
   } finally { URL.revokeObjectURL(url); }
 }
 
-export async function prepareMedia(file: File): Promise<PreparedMedia> {
-  if (file.type.startsWith("video/")) return prepareVideo(file);
+export async function prepareMedia(file: File, options?: PrepareMediaOptions): Promise<PreparedMedia> {
+  if (file.type.startsWith("video/")) return prepareVideo(file, options);
   return preparePhoto(file);
 }

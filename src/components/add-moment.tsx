@@ -30,7 +30,8 @@ type UploadItem = {
   error?: string;
 };
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+const MAX_SOURCE_VIDEO_SIZE = 2 * 1024 * 1024 * 1024;
 const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "video/mp4", "video/quicktime"]);
 const ACCEPTED_EXTENSIONS = /\.(?:jpe?g|png|webp|hei[cf]|mp4|mov)$/i;
@@ -52,7 +53,8 @@ const isAcceptedFile = (file: File) => ACCEPTED_TYPES.has(file.type) || (!file.t
 
 function friendlyUploadError(error: unknown, file: File) {
   const detail = error instanceof Error ? error.message : String(error ?? "");
-  if (file.size > MAX_FILE_SIZE || /\b413\b|too large|maximum.*size|payload/i.test(detail)) return "File is too large. Maximum size is 50 MB.";
+  if (/compressed video is too large|\b413\b|too large|maximum.*size|payload/i.test(detail)) return file.type.startsWith("video/") ? "Video could not be reduced below the 50 MB upload limit." : "File is too large. Maximum size is 50 MB.";
+  if (/compression is not supported/i.test(detail)) return "This device could not compress the video. Try a shorter clip.";
   if (/session expired/i.test(detail)) return "Your session expired. Please sign in again.";
   return "Upload failed. Check your connection and try again.";
 }
@@ -146,8 +148,10 @@ export function AddMoment({ tripId, slug }: Props) {
     const initial = accepted.map((file) => ({ id: crypto.randomUUID(), file, status: "extracting" as const, progress: 0, caption: "", capturedAt: localDateTime(file.lastModified), latitude: null, longitude: null, placeName: "", width: null, height: null, duration: null }));
     setItems((current) => [...current, ...initial]);
     for (const item of initial) {
-      if (item.file.size > MAX_FILE_SIZE) {
-        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error: "File is too large. Maximum size is 50 MB." } : entry));
+      const sourceLimit = item.file.type.startsWith("video/") ? MAX_SOURCE_VIDEO_SIZE : MAX_UPLOAD_SIZE;
+      if (item.file.size > sourceLimit) {
+        const error = item.file.type.startsWith("video/") ? "Video is too large to prepare on this device." : "File is too large. Maximum size is 50 MB.";
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error } : entry));
         continue;
       }
       try {
@@ -187,7 +191,7 @@ export function AddMoment({ tripId, slug }: Props) {
         removeFingerprintOnSuccess: true,
         chunkSize: 6 * 1024 * 1024,
         metadata: { bucketName: "trip-media", objectName: path, contentType: file.type, cacheControl: "31536000" },
-        onProgress: (sent, total) => setItems((current) => current.map((entry) => entry.id === itemId ? { ...entry, progress: Math.round((sent / total) * 100) } : entry)),
+        onProgress: (sent, total) => setItems((current) => current.map((entry) => entry.id === itemId ? { ...entry, progress: Math.round(40 + (sent / total) * 60) } : entry)),
         onError: reject,
         onSuccess: () => resolve(),
       });
@@ -207,7 +211,7 @@ export function AddMoment({ tripId, slug }: Props) {
       const mediaId = crypto.randomUUID();
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "uploading", progress: 0, error: undefined } : entry));
       try {
-        const prepared = await prepareMedia(item.file);
+        const prepared = await prepareMedia(item.file, { onProgress: (progress) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, progress: Math.round(progress * .4) } : entry)) });
         const extension = prepared.primary.name.includes(".") ? prepared.primary.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
         const path = `${tripId}/${user.id}/${mediaId}.${extension}`;
         const thumbnailPath = prepared.thumbnail ? `${tripId}/${user.id}/${mediaId}-thumb.webp` : null;
@@ -277,11 +281,11 @@ export function AddMoment({ tripId, slug }: Props) {
           <span className="section-kicker">UPLOADING YOUR JOURNEY</span>
           <div className="upload-progress-heading"><strong>{publishingComplete} of {publishingIds.length} complete</strong><span>{publishingProgress}%</span></div>
           <progress max="100" value={publishingProgress} aria-label={`Upload progress: ${publishingProgress}%`} />
-          <p>{publishingCurrent ? `Uploading ${publishingCurrent.file.name}` : "Preparing the next file…"}</p>
+          <p>{publishingCurrent ? `${publishingCurrent.file.type.startsWith("video/") && publishingCurrent.progress < 40 ? "Compressing" : "Uploading"} ${publishingCurrent.file.name}` : "Preparing the next file…"}</p>
           {publishingFailed ? <small>{publishingFailed} {publishingFailed === 1 ? "file has" : "files have"} failed. You can retry after the remaining uploads finish.</small> : null}
           <span className="upload-stay-open">Keep Roamline open until publishing is complete.</span>
         </section> : <>
-          <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select multiple photos or videos · 50 MB maximum each" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 50 MB each"}</span></button>
+          <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select multiple photos or videos · videos are compressed before upload" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · videos are compressed before upload"}</span></button>
           <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
           <div className="upload-list">{items.map((item) => { const expanded = expandedIds.has(item.id); return <article className={`upload-item simple-upload-item${expanded ? " is-expanded" : ""}`} key={item.id}><button className="simple-upload-summary" type="button" aria-expanded={expanded} onClick={() => setExpandedIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><LocalMediaThumbnail file={item.file} /><strong>{item.file.name}</strong>{item.status === "extracting" ? <LoaderCircle className="spin" size={13} /> : null}</button><button className="simple-upload-remove" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => { setItems((current) => current.filter((entry) => entry.id !== item.id)); setExpandedIds((current) => { const next = new Set(current); next.delete(item.id); return next; }); }}><X size={16} /></button>{expanded ? <div className="simple-upload-fields"><label><span>Date</span><input aria-label={`Date for ${item.file.name}`} type="date" value={item.capturedAt.slice(0, 10)} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: updateDate(event.target.value, entry.capturedAt) } : entry))} /></label><label><span>Caption <small>(optional)</small></span><input aria-label={`Caption for ${item.file.name}`} placeholder="Add a caption" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /></label>{item.error ? <span className="item-error">{item.error}</span> : null}</div> : item.error ? <span className="item-error simple-upload-error">{item.error}</span> : null}</article>; })}</div>
           {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>Publish ready files</button> : null}
@@ -294,7 +298,7 @@ export function AddMoment({ tripId, slug }: Props) {
         <div className="coordinate-grid"><label><span>Latitude</span><input name="latitude" required type="number" min="-90" max="90" step="any" placeholder="35.6984" value={selectedPlace.latitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", latitude: event.target.value }))} /></label><label><span>Longitude</span><input name="longitude" required type="number" min="-180" max="180" step="any" placeholder="139.7731" value={selectedPlace.longitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", longitude: event.target.value }))} /></label></div>
         <label><span>Date and time</span><input name="occurredAt" required type="datetime-local" defaultValue={localDateTime()} /></label>
         <label><span>Note (optional)</span><textarea name="note" maxLength={1200} placeholder="What happened here?" /></label>
-        <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => isAcceptedFile(file) && file.size <= MAX_FILE_SIZE)]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
+        <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => isAcceptedFile(file) && file.size <= (file.type.startsWith("video/") ? MAX_SOURCE_VIDEO_SIZE : MAX_UPLOAD_SIZE))]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>
       </form>}
       {message ? <p className={`dialog-message ${message === "Check-in added." || message.includes("published") ? "success" : ""}`} role="status">{message}</p> : null}
