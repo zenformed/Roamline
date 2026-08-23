@@ -100,7 +100,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 
 - [~] Add moment uses the native Apple Photos picker on iPhone/iPad and supports multi-select plus desktop drag/drop; a physical-device batch pass remains.
 - [~] Each uploaded photo/video offers Google place autocomplete and manual latitude/longitude entry; when no place is selected, approved Google reverse-geocoding converts manual or EXIF GPS coordinates into a stored city/country label used by the timeline and Trip Story. Live EXIF and manual-coordinate fixtures remain to be verified.
-- [x] Supported file types and the 500 MB per-file limit are shown and validated.
+- [x] Supported file types and the effective 50 MB project Storage limit are shown and validated before upload; raw Supabase/TUS errors are replaced with concise user-facing messages.
 - [x] Uploads use trip/user/UUID object paths with upsert disabled.
 - [~] New photo uploads—including HEIC/HEIF decoded locally in the browser—generate a durable 480px WebP thumbnail and a maximum-2048px WebP display copy; the full camera original is not retained. Timeline and homepage collages request the thumbnail while the viewer and Trip Story request the display copy. A physical iPhone/Android HEIC upload pass remains.
 - [~] New video uploads retain the playable source and attempt a 480px WebP poster, but iOS preview extraction is time-bounded and optional so it can never block the original upload. Timeline grids use the poster when available; a physical iPhone video upload pass remains.

@@ -30,7 +30,7 @@ type UploadItem = {
   error?: string;
 };
 
-const MAX_FILE_SIZE = 500 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "video/mp4", "video/quicktime"]);
 const ACCEPTED_EXTENSIONS = /\.(?:jpe?g|png|webp|hei[cf]|mp4|mov)$/i;
@@ -49,6 +49,13 @@ function LocalMediaThumbnail({ file }: { file: File }) {
     : <Image className="local-media-thumbnail" src={url} alt="" width={52} height={52} unoptimized onError={() => setFailed(true)} />;
 }
 const isAcceptedFile = (file: File) => ACCEPTED_TYPES.has(file.type) || (!file.type && ACCEPTED_EXTENSIONS.test(file.name));
+
+function friendlyUploadError(error: unknown, file: File) {
+  const detail = error instanceof Error ? error.message : String(error ?? "");
+  if (file.size > MAX_FILE_SIZE || /\b413\b|too large|maximum.*size|payload/i.test(detail)) return "File is too large. Maximum size is 50 MB.";
+  if (/session expired/i.test(detail)) return "Your session expired. Please sign in again.";
+  return "Upload failed. Check your connection and try again.";
+}
 
 function localDateTime(value?: Date | string | number | null) {
   const date = value ? new Date(value) : new Date();
@@ -140,7 +147,7 @@ export function AddMoment({ tripId, slug }: Props) {
     setItems((current) => [...current, ...initial]);
     for (const item of initial) {
       if (item.file.size > MAX_FILE_SIZE) {
-        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error: "File is larger than 500 MB." } : entry));
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error: "File is too large. Maximum size is 50 MB." } : entry));
         continue;
       }
       try {
@@ -214,7 +221,7 @@ export function AddMoment({ tripId, slug }: Props) {
         completed += 1;
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "complete", progress: 100 } : entry));
       } catch (error) {
-        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error: error instanceof Error ? error.message : "Upload failed." } : entry));
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "failed", error: friendlyUploadError(error, item.file) } : entry));
       }
     }
     setBusy(false); setPublishingIds([]);
@@ -274,7 +281,7 @@ export function AddMoment({ tripId, slug }: Props) {
           {publishingFailed ? <small>{publishingFailed} {publishingFailed === 1 ? "file has" : "files have"} failed. You can retry after the remaining uploads finish.</small> : null}
           <span className="upload-stay-open">Keep Roamline open until publishing is complete.</span>
         </section> : <>
-          <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select multiple photos or videos, then publish them here" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each"}</span></button>
+          <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select multiple photos or videos · 50 MB maximum each" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 50 MB each"}</span></button>
           <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
           <div className="upload-list">{items.map((item) => { const expanded = expandedIds.has(item.id); return <article className={`upload-item simple-upload-item${expanded ? " is-expanded" : ""}`} key={item.id}><button className="simple-upload-summary" type="button" aria-expanded={expanded} onClick={() => setExpandedIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><LocalMediaThumbnail file={item.file} /><strong>{item.file.name}</strong>{item.status === "extracting" ? <LoaderCircle className="spin" size={13} /> : null}</button><button className="simple-upload-remove" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => { setItems((current) => current.filter((entry) => entry.id !== item.id)); setExpandedIds((current) => { const next = new Set(current); next.delete(item.id); return next; }); }}><X size={16} /></button>{expanded ? <div className="simple-upload-fields"><label><span>Date</span><input aria-label={`Date for ${item.file.name}`} type="date" value={item.capturedAt.slice(0, 10)} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: updateDate(event.target.value, entry.capturedAt) } : entry))} /></label><label><span>Caption <small>(optional)</small></span><input aria-label={`Caption for ${item.file.name}`} placeholder="Add a caption" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /></label>{item.error ? <span className="item-error">{item.error}</span> : null}</div> : item.error ? <span className="item-error simple-upload-error">{item.error}</span> : null}</article>; })}</div>
           {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>Publish ready files</button> : null}
