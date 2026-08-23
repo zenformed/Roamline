@@ -306,7 +306,7 @@ export function AddMoment({ tripId, slug }: Props) {
       <div className="dialog-head"><h2>Add Roamline Shortcut</h2></div>
       <div className="shortcut-setup-body">
         <div className="shortcut-setup-mark"><Smartphone size={25} /></div>
-        <p>Add the Roamline Apple Shortcut to upload photos from Apple Photos.</p>
+        <p>This is required to upload photos on an Apple device.</p>
         <a className="primary-button shortcut-install" href={SHORTCUT_INSTALL_URL} target="_blank" rel="noreferrer" onClick={() => { window.localStorage.setItem("roamline-iphone-shortcut-ready", "true"); setShortcutReady(true); shortcutInstallPendingRef.current = true; }}>Add Shortcut</a>
       </div>
     </dialog>
