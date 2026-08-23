@@ -26,10 +26,10 @@ export async function POST(request: Request) {
   });
   if (error) return Response.json({ error: error.message }, { status: 403 });
 
-  const launchUrl = new URL("shortcuts://run-shortcut");
-  launchUrl.searchParams.set("name", SHORTCUT_NAME);
-  launchUrl.searchParams.set("input", "text");
-  launchUrl.searchParams.set("text", token);
+  // URLSearchParams serializes spaces as "+", but the Shortcuts URL scheme
+  // treats that as a literal character in the shortcut name. Encode it with
+  // percent escapes so iOS finds "Upload to Roamline" correctly.
+  const launchUrl = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}&input=text&text=${encodeURIComponent(token)}`;
 
-  return Response.json({ launchUrl: launchUrl.toString(), expiresInMinutes: 45 });
+  return Response.json({ launchUrl, expiresInMinutes: 45 });
 }
