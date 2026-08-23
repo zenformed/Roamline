@@ -51,12 +51,36 @@ async function prepareVideo(file: File): Promise<PreparedMedia> {
   const url = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
-    video.muted = true; video.preload = "metadata"; video.playsInline = true; video.src = url;
-    await new Promise<void>((resolve, reject) => { video.onloadeddata = () => resolve(); video.onerror = () => reject(new Error("Video preview could not be created.")); });
-    if (video.duration > .15) { video.currentTime = Math.min(.1, video.duration / 2); await new Promise<void>((resolve) => { video.onseeked = () => resolve(); }); }
-    const thumb = await drawImage(video, video.videoWidth, video.videoHeight, MEDIA_THUMBNAIL_MAX_PX, .76);
-    const stem = file.name.replace(/\.[^.]+$/, "") || "video";
-    return { primary: file, thumbnail: new File([thumb.blob], `${stem}-thumb.webp`, { type: "image/webp", lastModified: file.lastModified }), width: video.videoWidth || null, height: video.videoHeight || null, duration: Number.isFinite(video.duration) ? video.duration : null };
+    video.muted = true; video.preload = "auto"; video.playsInline = true; video.src = url;
+    const waitFor = (eventName: "loadedmetadata" | "loadeddata" | "seeked", timeoutMs: number) => new Promise<boolean>((resolve) => {
+      const finish = (ready: boolean) => { window.clearTimeout(timer); video.removeEventListener(eventName, onReady); video.removeEventListener("error", onError); resolve(ready); };
+      const onReady = () => finish(true);
+      const onError = () => finish(false);
+      const timer = window.setTimeout(() => finish(false), timeoutMs);
+      video.addEventListener(eventName, onReady, { once: true });
+      video.addEventListener("error", onError, { once: true });
+    });
+    const metadataPromise = waitFor("loadedmetadata", 8000);
+    video.load();
+    const metadataReady = video.readyState >= 1 || await metadataPromise;
+    const width = metadataReady ? video.videoWidth || null : null;
+    const height = metadataReady ? video.videoHeight || null : null;
+    const duration = metadataReady && Number.isFinite(video.duration) ? video.duration : null;
+    let thumbnail: File | null = null;
+    const frameReady = video.readyState >= 2 || await waitFor("loadeddata", 6000);
+    if (frameReady && width && height) {
+      if (duration && duration > .15) {
+        const seekPromise = waitFor("seeked", 3500);
+        video.currentTime = Math.min(.1, duration / 2);
+        await seekPromise;
+      }
+      try {
+        const thumb = await drawImage(video, width, height, MEDIA_THUMBNAIL_MAX_PX, .76);
+        const stem = file.name.replace(/\.[^.]+$/, "") || "video";
+        thumbnail = new File([thumb.blob], `${stem}-thumb.webp`, { type: "image/webp", lastModified: file.lastModified });
+      } catch { /* A poster is optional; never block the video upload. */ }
+    }
+    return { primary: file, thumbnail, width, height, duration };
   } finally { URL.revokeObjectURL(url); }
 }
 

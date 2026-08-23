@@ -53,7 +53,7 @@
 .confirm-actions button { min-height: 43px; font: inherit; font-size: 11px; font-weight: 600; }
 .danger-button { border: 0; border-radius: 8px; background: #a53425; color: white; display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; }
 .danger-button:disabled, .confirm-close:disabled { opacity: .6; cursor: wait; }
-.media-hit { position: absolute; inset: 0; z-index: 2; width: 100%; border: 0; background: transparent; cursor: zoom-in; touch-action: manipulation; -webkit-touch-callout: none; }
+.media-hit { position: absolute; inset: 0; z-index: 2; width: 100%; border: 0; background: transparent; cursor: zoom-in; touch-action: manipulation; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }.moment.media-open,.moment.media-open *,.moment-grid.is-selecting,.moment-grid.is-selecting * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .media-select-indicator { position: absolute; z-index: 4; top: 10px; left: 10px; width: 27px; height: 27px; border: 2px solid rgba(255,255,255,.95); border-radius: 50%; background: rgba(20,20,20,.22); color: white; display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .16s, background .16s, transform .16s; box-shadow: 0 1px 5px rgba(0,0,0,.22); }
 .moment-grid.is-selecting .media-select-indicator, .moment.is-selected .media-select-indicator { opacity: 1; }
 @media (hover: hover) and (pointer: fine) {

@@ -103,7 +103,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [x] Supported file types and the 500 MB per-file limit are shown and validated.
 - [x] Uploads use trip/user/UUID object paths with upsert disabled.
 - [~] New photo uploads—including HEIC/HEIF decoded locally in the browser—generate a durable 480px WebP thumbnail and a maximum-2048px WebP display copy; the full camera original is not retained. Timeline and homepage collages request the thumbnail while the viewer and Trip Story request the display copy. A physical iPhone/Android HEIC upload pass remains.
-- [~] New video uploads retain the playable source but generate a 480px WebP poster; timeline grids use the poster instead of preloading video data. A physical mobile video upload pass remains.
+- [~] New video uploads retain the playable source and attempt a 480px WebP poster, but iOS preview extraction is time-bounded and optional so it can never block the original upload. Timeline grids use the poster when available; a physical iPhone video upload pass remains.
 - [~] Legacy media without derivatives falls back to its existing original URL; a one-time derivative backfill and optional original cleanup remain before this optimization covers old trips.
 - [x] Every primary photo/video uses Supabase's TUS resumable upload endpoint with automatic network retries and sequential batch processing.
 - [~] Before publishing, each file appears as a collapsed local photo/video thumbnail and filename; tapping the row reveals only its date and optional caption. Publishing then shows aggregate progress and failures; a physical iPhone preview pass remains.
@@ -111,6 +111,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [~] EXIF capture time and GPS are extracted when present; fixture verification remains.
 - [~] Browser-available video dimensions and duration are extracted; embedded video GPS is not yet supported.
 - [x] Missing or stripped GPS metadata is clearly indicated.
+- [~] Mobile long-press selection suppresses Safari text selection, image dragging, touch callouts, and context menus so cross-day multi-select can continue without an extra clearing tap; physical iPhone verification remains.
 - [ ] Users can assign a Google Place to one item or the entire batch.
 - [~] Users can edit caption, capture time, and place name before publishing; coordinates come from EXIF or a manual check-in.
 - [~] Trip owners can edit every media moment; contributors can edit their own caption, capture time, place, and coordinates. Browser mutation verification remains.
