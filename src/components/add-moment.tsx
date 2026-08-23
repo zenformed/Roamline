@@ -86,6 +86,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
   const shortcutInstallPendingRef = useRef(false);
+  const shortcutSyncingRef = useRef(false);
   const [mode, setMode] = useState<"upload" | "checkin">("upload");
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -96,6 +97,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const [isAppleMobile, setIsAppleMobile] = useState(false);
   const [shortcutReady, setShortcutReady] = useState(false);
   const [launchingShortcut, setLaunchingShortcut] = useState(false);
+  const [shortcutSyncStatus, setShortcutSyncStatus] = useState<"idle" | "syncing" | "complete">("idle");
   const selectPlace = useCallback((place: SelectedPlace) => setSelectedPlace({ ...place, latitude: String(place.latitude), longitude: String(place.longitude) }), []);
 
   useEffect(() => {
@@ -115,6 +117,39 @@ export function AddMoment({ tripId, slug }: Props) {
     return () => document.removeEventListener("visibilitychange", continueAfterInstall);
   });
 
+  useEffect(() => {
+    async function syncReturnedUpload() {
+      if (document.visibilityState !== "visible" || shortcutSyncingRef.current) return;
+      const stored = window.sessionStorage.getItem("roamline-iphone-upload-pending");
+      if (!stored) return;
+      let pending: { sessionId?: string; tripId?: string };
+      try { pending = JSON.parse(stored); } catch { window.sessionStorage.removeItem("roamline-iphone-upload-pending"); return; }
+      if (!pending.sessionId || pending.tripId !== tripId) return;
+      shortcutSyncingRef.current = true;
+      setShortcutSyncStatus("syncing");
+      try {
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          const response = await fetch(`/api/iphone-upload/session?id=${encodeURIComponent(pending.sessionId)}`, { cache: "no-store" });
+          const status = await response.json();
+          if (!response.ok || status.complete || status.expired) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        }
+        await showLatestTrip();
+        window.sessionStorage.removeItem("roamline-iphone-upload-pending");
+        dialogRef.current?.close();
+        setShortcutSyncStatus("complete");
+        window.setTimeout(() => setShortcutSyncStatus("idle"), 2600);
+      } finally {
+        shortcutSyncingRef.current = false;
+      }
+    }
+    const onVisible = () => { void syncReturnedUpload(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    void syncReturnedUpload();
+    return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("pageshow", onVisible); };
+  });
+
   async function launchIphoneUpload() {
     setLaunchingShortcut(true); setMessage("");
     try {
@@ -124,7 +159,9 @@ export function AddMoment({ tripId, slug }: Props) {
         body: JSON.stringify({ tripId }),
       });
       const result = await response.json();
-      if (!response.ok || !result.launchUrl) throw new Error(result.error ?? "Could not open the iPhone uploader.");
+      if (!response.ok || !result.launchUrl || !result.sessionId) throw new Error(result.error ?? "Could not open the iPhone uploader.");
+      window.sessionStorage.setItem("roamline-iphone-upload-pending", JSON.stringify({ sessionId: result.sessionId, tripId, startedAt: Date.now() }));
+      dialogRef.current?.close();
       window.location.assign(result.launchUrl);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not open the iPhone uploader.");
@@ -275,6 +312,7 @@ export function AddMoment({ tripId, slug }: Props) {
   }
 
   return <>
+    {shortcutSyncStatus !== "idle" ? <div className={`shortcut-return-status ${shortcutSyncStatus}`} role="status">{shortcutSyncStatus === "syncing" ? <><LoaderCircle className="spin" size={16} /> Updating journey…</> : <><Check size={16} /> Journey updated</>}</div> : null}
     <button className="floating-add" type="button" onClick={() => dialogRef.current?.showModal()}><Plus size={17} /> Add moment</button>
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setMessage("")}>
       <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Add to the journey"}</h2></div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
