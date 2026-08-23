@@ -33,8 +33,6 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "video/mp4", "video/quicktime"]);
 const ACCEPTED_EXTENSIONS = /\.(?:jpe?g|png|webp|hei[cf]|mp4|mov)$/i;
-const SHORTCUT_INSTALL_URL = process.env.NEXT_PUBLIC_ROAMLINE_SHORTCUT_URL ?? "https://www.icloud.com/shortcuts/43fbfc01c53f4b4bb229c5608a9c69ac";
-
 function ApplePhotosMark({ size = 28 }: { size?: number }) {
   const colors = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#00c7be", "#007aff", "#5856d6", "#af52de"];
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 28 28">{colors.map((color, index) => <ellipse key={color} cx="14" cy="6.4" rx="4.1" ry="6.1" fill={color} fillOpacity=".9" transform={`rotate(${index * 45} 14 14)`} />)}<circle cx="14" cy="14" r="2.2" fill="white" /></svg>;
@@ -82,11 +80,8 @@ export function AddMoment({ tripId, slug }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const shortcutDialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
-  const shortcutInstallPendingRef = useRef(false);
-  const shortcutSyncingRef = useRef(false);
   const [mode, setMode] = useState<"upload" | "checkin">("upload");
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -95,86 +90,25 @@ export function AddMoment({ tripId, slug }: Props) {
   const [checkinFiles, setCheckinFiles] = useState<File[]>([]);
   const [selectedPlace, setSelectedPlace] = useState({ id: "", name: "", address: "", latitude: "", longitude: "" });
   const [isAppleMobile, setIsAppleMobile] = useState(false);
-  const [shortcutReady, setShortcutReady] = useState(false);
-  const [launchingShortcut, setLaunchingShortcut] = useState(false);
-  const [shortcutSyncStatus, setShortcutSyncStatus] = useState<"idle" | "syncing" | "complete">("idle");
   const selectPlace = useCallback((place: SelectedPlace) => setSelectedPlace({ ...place, latitude: String(place.latitude), longitude: String(place.longitude) }), []);
 
   useEffect(() => {
     const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     setIsAppleMobile(appleMobile);
-    setShortcutReady(window.localStorage.getItem("roamline-iphone-shortcut-ready") === "true");
   }, []);
 
   useEffect(() => {
-    const continueAfterInstall = () => {
-      if (document.visibilityState !== "visible" || !shortcutInstallPendingRef.current) return;
-      shortcutInstallPendingRef.current = false;
-      shortcutDialogRef.current?.close();
-      void launchIphoneUpload();
+    if (!busy) return;
+    const preventAccidentalExit = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", preventAccidentalExit);
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    const navigatorWithWakeLock = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+    void navigatorWithWakeLock.wakeLock?.request("screen").then((lock) => { wakeLock = lock; }).catch(() => undefined);
+    return () => {
+      window.removeEventListener("beforeunload", preventAccidentalExit);
+      void wakeLock?.release();
     };
-    document.addEventListener("visibilitychange", continueAfterInstall);
-    return () => document.removeEventListener("visibilitychange", continueAfterInstall);
-  });
-
-  useEffect(() => {
-    async function syncReturnedUpload() {
-      if (document.visibilityState !== "visible" || shortcutSyncingRef.current) return;
-      const stored = window.sessionStorage.getItem("roamline-iphone-upload-pending");
-      if (!stored) return;
-      let pending: { sessionId?: string; tripId?: string };
-      try { pending = JSON.parse(stored); } catch { window.sessionStorage.removeItem("roamline-iphone-upload-pending"); return; }
-      if (!pending.sessionId || pending.tripId !== tripId) return;
-      shortcutSyncingRef.current = true;
-      setShortcutSyncStatus("syncing");
-      try {
-        for (let attempt = 0; attempt < 12; attempt += 1) {
-          const response = await fetch(`/api/iphone-upload/session?id=${encodeURIComponent(pending.sessionId)}`, { cache: "no-store" });
-          const status = await response.json();
-          if (!response.ok || status.complete || status.expired) break;
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        }
-        await showLatestTrip();
-        window.sessionStorage.removeItem("roamline-iphone-upload-pending");
-        dialogRef.current?.close();
-        setShortcutSyncStatus("complete");
-        window.setTimeout(() => setShortcutSyncStatus("idle"), 2600);
-      } finally {
-        shortcutSyncingRef.current = false;
-      }
-    }
-    const onVisible = () => { void syncReturnedUpload(); };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("pageshow", onVisible);
-    void syncReturnedUpload();
-    return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("pageshow", onVisible); };
-  });
-
-  async function launchIphoneUpload() {
-    setLaunchingShortcut(true); setMessage("");
-    try {
-      const response = await fetch("/api/iphone-upload/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.launchUrl || !result.sessionId) throw new Error(result.error ?? "Could not open the iPhone uploader.");
-      window.sessionStorage.setItem("roamline-iphone-upload-pending", JSON.stringify({ sessionId: result.sessionId, tripId, startedAt: Date.now() }));
-      dialogRef.current?.close();
-      window.location.assign(result.launchUrl);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not open the iPhone uploader.");
-    } finally {
-      setLaunchingShortcut(false);
-    }
-  }
-
-  function chooseUploadSource() {
-    if (!isAppleMobile) { inputRef.current?.click(); return; }
-    if (shortcutReady) { void launchIphoneUpload(); return; }
-    shortcutDialogRef.current?.showModal();
-  }
+  }, [busy]);
 
   async function showLatestTrip() {
     await refreshTrip(slug);
@@ -252,16 +186,12 @@ export function AddMoment({ tripId, slug }: Props) {
         const extension = prepared.primary.name.includes(".") ? prepared.primary.name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
         const path = `${tripId}/${user.id}/${mediaId}.${extension}`;
         const thumbnailPath = prepared.thumbnail ? `${tripId}/${user.id}/${mediaId}-thumb.webp` : null;
-        if (prepared.primary.size >= RESUMABLE_THRESHOLD) await resumableUpload(prepared.primary, path, item.id);
-        else {
-          const { error } = await supabase.storage.from("trip-media").upload(path, prepared.primary, { contentType: prepared.primary.type, cacheControl: "31536000", upsert: false });
-          if (error) throw error;
-        }
+        await resumableUpload(prepared.primary, path, item.id);
         if (prepared.thumbnail && thumbnailPath) {
           const { error } = await supabase.storage.from("trip-media").upload(thumbnailPath, prepared.thumbnail, { contentType: "image/webp", cacheControl: "31536000", upsert: false });
           if (error) { await supabase.storage.from("trip-media").remove([path]); throw error; }
         }
-        const { error } = await supabase.from("media").insert({ trip_id: tripId, uploader_id: user.id, kind: item.file.type.startsWith("video/") ? "video" : "photo", storage_path: path, thumbnail_storage_path: thumbnailPath, original_filename: item.file.name, mime_type: prepared.primary.type, width: prepared.width, height: prepared.height, duration_seconds: prepared.duration, caption: item.caption.trim() || null, captured_at: item.capturedAt ? new Date(item.capturedAt).toISOString() : null, place_name: resolvedPlace || null, latitude: item.latitude, longitude: item.longitude, metadata: { source: "browser-upload", originalLastModified: item.file.lastModified, originalBytes: item.file.size, displayBytes: prepared.primary.size, thumbnailBytes: prepared.thumbnail?.size ?? null } });
+        const { error } = await supabase.from("media").insert({ id: mediaId, trip_id: tripId, uploader_id: user.id, kind: item.file.type.startsWith("video/") ? "video" : "photo", storage_path: path, thumbnail_storage_path: thumbnailPath, original_filename: item.file.name, mime_type: prepared.primary.type, width: prepared.width, height: prepared.height, duration_seconds: prepared.duration, caption: item.caption.trim() || null, captured_at: item.capturedAt ? new Date(item.capturedAt).toISOString() : null, place_name: resolvedPlace || null, latitude: item.latitude, longitude: item.longitude, metadata: { source: "browser-upload", originalLastModified: item.file.lastModified, originalBytes: item.file.size, displayBytes: prepared.primary.size, thumbnailBytes: prepared.thumbnail?.size ?? null } });
         if (error) { await supabase.storage.from("trip-media").remove([path, ...(thumbnailPath ? [thumbnailPath] : [])]); throw error; }
         completed += 1;
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "complete", progress: 100 } : entry));
@@ -312,7 +242,6 @@ export function AddMoment({ tripId, slug }: Props) {
   }
 
   return <>
-    {shortcutSyncStatus !== "idle" ? <div className={`shortcut-return-status ${shortcutSyncStatus}`} role="status">{shortcutSyncStatus === "syncing" ? <><LoaderCircle className="spin" size={16} /> Updating journey…</> : <><Check size={16} /> Journey updated</>}</div> : null}
     <button className="floating-add" type="button" onClick={() => dialogRef.current?.showModal()}><Plus size={17} /> Add moment</button>
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setMessage("")}>
       <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Add to the journey"}</h2></div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
@@ -327,7 +256,7 @@ export function AddMoment({ tripId, slug }: Props) {
           {publishingFailed ? <small>{publishingFailed} {publishingFailed === 1 ? "file has" : "files have"} failed. You can retry after the remaining uploads finish.</small> : null}
           <span className="upload-stay-open">Keep Roamline open until publishing is complete.</span>
         </section> : <>
-          <button className="drop-zone" type="button" disabled={launchingShortcut} onClick={chooseUploadSource} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{launchingShortcut ? "Opening Apple Photos…" : isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select many at once, then return here when publishing finishes" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each"}</span></button>
+          <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select multiple photos or videos, then publish them here" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each"}</span></button>
           <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
           <div className="upload-list">{items.map((item) => <article className="upload-item" key={item.id}><div className="upload-status">{item.status === "complete" ? <Check size={17} /> : item.status === "extracting" || item.status === "uploading" ? <LoaderCircle className="spin" size={17} /> : <ImagePlus size={17} />}</div><div><strong>{item.file.name}</strong><span>{(item.file.size / 1024 / 1024).toFixed(1)} MB · {item.latitude === null ? "No GPS metadata" : "GPS found"} · {item.status}{item.status === "uploading" ? ` ${item.progress}%` : ""}</span><div className="upload-fields"><input aria-label={`Caption for ${item.file.name}`} placeholder="Caption (optional)" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /><input aria-label={`Capture time for ${item.file.name}`} type="datetime-local" value={item.capturedAt} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: event.target.value } : entry))} /></div><div className="upload-location-editor"><PlaceSearch key={`${item.id}-${item.placeName}`} compact showCurrentLocation={false} initialQuery={item.placeName} placeholder="Search for the place…" onSelect={(place) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, placeName: place.name, latitude: place.latitude, longitude: place.longitude } : entry))} /><div className="upload-coordinates"><input aria-label={`Latitude for ${item.file.name}`} type="number" min="-90" max="90" step="any" placeholder="Latitude" value={item.latitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, latitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /><input aria-label={`Longitude for ${item.file.name}`} type="number" min="-180" max="180" step="any" placeholder="Longitude" value={item.longitude ?? ""} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, longitude: event.target.value === "" ? null : Number(event.target.value), placeName: "" } : entry))} /></div>{item.placeName ? <small className="resolved-place"><MapPin size={12} /> {item.placeName}</small> : item.latitude !== null && item.longitude !== null ? <small className="resolved-place">City and country will be resolved from these coordinates.</small> : null}</div>{item.error ? <span className="item-error">{item.error}</span> : null}</div><button className="icon-button" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}><X size={16} /></button></article>)}</div>
           {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>Publish ready files</button> : null}
@@ -344,14 +273,6 @@ export function AddMoment({ tripId, slug }: Props) {
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>
       </form>}
       {message ? <p className={`dialog-message ${message === "Check-in added." || message.includes("published") ? "success" : ""}`} role="status">{message}</p> : null}
-    </dialog>
-    <dialog className="shortcut-setup-dialog" ref={shortcutDialogRef} onCancel={(event) => event.preventDefault()}>
-      <div className="dialog-head"><h2>Add Roamline Shortcut</h2></div>
-      <div className="shortcut-setup-body">
-        <div className="shortcut-setup-mark"><ApplePhotosMark size={30} /></div>
-        <p>This is required to upload photos on an Apple device.</p>
-        <a className="primary-button shortcut-install" href={SHORTCUT_INSTALL_URL} target="_blank" rel="noreferrer" onClick={() => { window.localStorage.setItem("roamline-iphone-shortcut-ready", "true"); setShortcutReady(true); shortcutInstallPendingRef.current = true; }}>Add Shortcut</a>
-      </div>
     </dialog>
   </>;
 }

@@ -98,16 +98,16 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 
 ### Photo and video uploads
 
-- [~] Add moment supports multi-select and desktop drag/drop; mobile browser verification remains.
+- [~] Add moment uses the native Apple Photos picker on iPhone/iPad and supports multi-select plus desktop drag/drop; a physical-device batch pass remains.
 - [~] Each uploaded photo/video offers Google place autocomplete and manual latitude/longitude entry; when no place is selected, approved Google reverse-geocoding converts manual or EXIF GPS coordinates into a stored city/country label used by the timeline and Trip Story. Live EXIF and manual-coordinate fixtures remain to be verified.
 - [x] Supported file types and the 500 MB per-file limit are shown and validated.
 - [x] Uploads use trip/user/UUID object paths with upsert disabled.
 - [~] New photo uploads—including HEIC/HEIF decoded locally in the browser—generate a durable 480px WebP thumbnail and a maximum-2048px WebP display copy; the full camera original is not retained. Timeline and homepage collages request the thumbnail while the viewer and Trip Story request the display copy. A physical iPhone/Android HEIC upload pass remains.
 - [~] New video uploads retain the playable source but generate a 480px WebP poster; timeline grids use the poster instead of preloading video data. A physical mobile video upload pass remains.
 - [~] Legacy media without derivatives falls back to its existing original URL; a one-time derivative backfill and optional original cleanup remain before this optimization covers old trips.
-- [x] Files 6 MB and larger use Supabase's TUS resumable upload endpoint.
+- [x] Every primary photo/video uses Supabase's TUS resumable upload endpoint with automatic network retries and sequential batch processing.
 - [~] Each file shows extracting, ready, uploading with progress, complete, and failed states; server-side processing is not currently required.
-- [~] Batch upload tracks per-file progress and retries failed items without re-uploading completed items; aggregate progress remains.
+- [~] Batch upload tracks per-file and aggregate progress, retries failed items without re-uploading completed items, warns before leaving, and requests a screen wake lock while publishing; physical iPhone interruption testing remains.
 - [~] EXIF capture time and GPS are extracted when present; fixture verification remains.
 - [~] Browser-available video dimensions and duration are extracted; embedded video GPS is not yet supported.
 - [x] Missing or stripped GPS metadata is clearly indicated.
