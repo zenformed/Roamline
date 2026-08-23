@@ -80,6 +80,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const shortcutDialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
+  const shortcutInstallPendingRef = useRef(false);
   const [mode, setMode] = useState<"upload" | "checkin">("upload");
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -97,6 +98,17 @@ export function AddMoment({ tripId, slug }: Props) {
     setIsAppleMobile(appleMobile);
     setShortcutReady(window.localStorage.getItem("roamline-iphone-shortcut-ready") === "true");
   }, []);
+
+  useEffect(() => {
+    const continueAfterInstall = () => {
+      if (document.visibilityState !== "visible" || !shortcutInstallPendingRef.current) return;
+      shortcutInstallPendingRef.current = false;
+      shortcutDialogRef.current?.close();
+      void launchIphoneUpload();
+    };
+    document.addEventListener("visibilitychange", continueAfterInstall);
+    return () => document.removeEventListener("visibilitychange", continueAfterInstall);
+  });
 
   async function launchIphoneUpload() {
     setLaunchingShortcut(true); setMessage("");
@@ -290,14 +302,12 @@ export function AddMoment({ tripId, slug }: Props) {
       </form>}
       {message ? <p className={`dialog-message ${message === "Check-in added." || message.includes("published") ? "success" : ""}`} role="status">{message}</p> : null}
     </dialog>
-    <dialog className="shortcut-setup-dialog" ref={shortcutDialogRef}>
-      <div className="dialog-head"><div><span className="section-kicker">ONE-TIME IPHONE SETUP</span><h2>Fast uploads from Apple Photos</h2></div><button className="icon-button" type="button" aria-label="Close" onClick={() => shortcutDialogRef.current?.close()}><X size={19} /></button></div>
+    <dialog className="shortcut-setup-dialog" ref={shortcutDialogRef} onCancel={(event) => event.preventDefault()}>
+      <div className="dialog-head"><h2>Add Roamline Shortcut</h2></div>
       <div className="shortcut-setup-body">
         <div className="shortcut-setup-mark"><Smartphone size={25} /></div>
-        <p>Add Roamline&apos;s free Apple Shortcut once. After this, the same upload button opens Apple Photos directly with no codes or extra sign-in.</p>
-        <a className="primary-button shortcut-install" href={SHORTCUT_INSTALL_URL} target="_blank" rel="noreferrer">Add Upload to Roamline</a>
-        <button className="text-button" type="button" disabled={launchingShortcut} onClick={() => { window.localStorage.setItem("roamline-iphone-shortcut-ready", "true"); setShortcutReady(true); shortcutDialogRef.current?.close(); void launchIphoneUpload(); }}>I added it — choose photos</button>
-        <button className="text-button quiet" type="button" onClick={() => { shortcutDialogRef.current?.close(); inputRef.current?.click(); }}>Use the regular picker this time</button>
+        <p>Add the Roamline Apple Shortcut to upload photos from Apple Photos.</p>
+        <a className="primary-button shortcut-install" href={SHORTCUT_INSTALL_URL} target="_blank" rel="noreferrer" onClick={() => { window.localStorage.setItem("roamline-iphone-shortcut-ready", "true"); setShortcutReady(true); shortcutInstallPendingRef.current = true; }}>Add Shortcut</a>
       </div>
     </dialog>
   </>;
