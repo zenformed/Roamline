@@ -2,6 +2,7 @@
 
 import { parse } from "exifr";
 import { ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import * as tus from "tus-js-client";
@@ -36,6 +37,16 @@ const ACCEPTED_EXTENSIONS = /\.(?:jpe?g|png|webp|hei[cf]|mp4|mov)$/i;
 function ApplePhotosMark({ size = 28 }: { size?: number }) {
   const colors = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#00c7be", "#007aff", "#5856d6", "#af52de"];
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 28 28">{colors.map((color, index) => <ellipse key={color} cx="14" cy="6.4" rx="4.1" ry="6.1" fill={color} fillOpacity=".9" transform={`rotate(${index * 45} 14 14)`} />)}<circle cx="14" cy="14" r="2.2" fill="white" /></svg>;
+}
+
+function LocalMediaThumbnail({ file }: { file: File }) {
+  const [url] = useState(() => URL.createObjectURL(file));
+  const [failed, setFailed] = useState(false);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  if (!url || failed) return <span className="local-media-fallback"><ImagePlus size={17} /></span>;
+  return file.type.startsWith("video/")
+    ? <video className="local-media-thumbnail" src={url} muted playsInline preload="metadata" aria-hidden="true" onError={() => setFailed(true)} />
+    : <Image className="local-media-thumbnail" src={url} alt="" width={52} height={52} unoptimized onError={() => setFailed(true)} />;
 }
 const isAcceptedFile = (file: File) => ACCEPTED_TYPES.has(file.type) || (!file.type && ACCEPTED_EXTENSIONS.test(file.name));
 
@@ -90,6 +101,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const checkinInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"upload" | "checkin">("upload");
   const [items, setItems] = useState<UploadItem[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const [publishingIds, setPublishingIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -264,7 +276,7 @@ export function AddMoment({ tripId, slug }: Props) {
         </section> : <>
           <button className="drop-zone" type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{isAppleMobile ? <ApplePhotosMark /> : <Upload size={22} />}<strong>{isAppleMobile ? "Upload with Apple Photos" : "Choose photos or videos"}</strong><span>{isAppleMobile ? "Select multiple photos or videos, then publish them here" : "Multi-select or drag and drop · JPG, HEIC, PNG, WebP, MP4, MOV · up to 500 MB each"}</span></button>
           <input ref={inputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
-          <div className="upload-list">{items.map((item) => <article className="upload-item simple-upload-item" key={item.id}><div className="simple-upload-copy"><div className="simple-upload-name"><strong>{item.file.name}</strong>{item.status === "extracting" ? <span><LoaderCircle className="spin" size={13} /> Preparing…</span> : null}</div><div className="simple-upload-fields"><label><span>Date</span><input aria-label={`Date for ${item.file.name}`} type="date" value={item.capturedAt.slice(0, 10)} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: updateDate(event.target.value, entry.capturedAt) } : entry))} /></label><label><span>Caption <small>(optional)</small></span><input aria-label={`Caption for ${item.file.name}`} placeholder="Add a caption" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /></label></div>{item.error ? <span className="item-error">{item.error}</span> : null}</div><button className="icon-button" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}><X size={16} /></button></article>)}</div>
+          <div className="upload-list">{items.map((item) => { const expanded = expandedIds.has(item.id); return <article className={`upload-item simple-upload-item${expanded ? " is-expanded" : ""}`} key={item.id}><button className="simple-upload-summary" type="button" aria-expanded={expanded} onClick={() => setExpandedIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><LocalMediaThumbnail file={item.file} /><strong>{item.file.name}</strong>{item.status === "extracting" ? <LoaderCircle className="spin" size={13} /> : null}</button><button className="simple-upload-remove" type="button" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => { setItems((current) => current.filter((entry) => entry.id !== item.id)); setExpandedIds((current) => { const next = new Set(current); next.delete(item.id); return next; }); }}><X size={16} /></button>{expanded ? <div className="simple-upload-fields"><label><span>Date</span><input aria-label={`Date for ${item.file.name}`} type="date" value={item.capturedAt.slice(0, 10)} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, capturedAt: updateDate(event.target.value, entry.capturedAt) } : entry))} /></label><label><span>Caption <small>(optional)</small></span><input aria-label={`Caption for ${item.file.name}`} placeholder="Add a caption" value={item.caption} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, caption: event.target.value } : entry))} /></label>{item.error ? <span className="item-error">{item.error}</span> : null}</div> : item.error ? <span className="item-error simple-upload-error">{item.error}</span> : null}</article>; })}</div>
           {items.length ? <button className="primary-button publish-button" type="button" disabled={busy || items.every((item) => item.status === "complete" || item.status === "extracting")} onClick={() => void publishUploads()}>Publish ready files</button> : null}
         </>}
       </div> : <form className="checkin-form" onSubmit={createCheckin}>

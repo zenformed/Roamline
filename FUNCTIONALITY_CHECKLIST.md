@@ -106,7 +106,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [~] New video uploads retain the playable source but generate a 480px WebP poster; timeline grids use the poster instead of preloading video data. A physical mobile video upload pass remains.
 - [~] Legacy media without derivatives falls back to its existing original URL; a one-time derivative backfill and optional original cleanup remain before this optimization covers old trips.
 - [x] Every primary photo/video uses Supabase's TUS resumable upload endpoint with automatic network retries and sequential batch processing.
-- [~] Each file shows extracting, ready, uploading with progress, complete, and failed states; server-side processing is not currently required.
+- [~] Before publishing, each file appears as a collapsed local photo/video thumbnail and filename; tapping the row reveals only its date and optional caption. Publishing then shows aggregate progress and failures; a physical iPhone preview pass remains.
 - [~] Batch upload tracks per-file and aggregate progress, retries failed items without re-uploading completed items, warns before leaving, and requests a screen wake lock while publishing; physical iPhone interruption testing remains.
 - [~] EXIF capture time and GPS are extracted when present; fixture verification remains.
 - [~] Browser-available video dimensions and duration are extracted; embedded video GPS is not yet supported.
