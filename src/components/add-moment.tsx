@@ -33,7 +33,7 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
 const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "video/mp4", "video/quicktime"]);
 const ACCEPTED_EXTENSIONS = /\.(?:jpe?g|png|webp|hei[cf]|mp4|mov)$/i;
-const SHORTCUT_INSTALL_URL = process.env.NEXT_PUBLIC_ROAMLINE_SHORTCUT_URL ?? "https://www.icloud.com/shortcuts/0d72bd85ec1f49dd9a4f9636b0a453e4";
+const SHORTCUT_INSTALL_URL = process.env.NEXT_PUBLIC_ROAMLINE_SHORTCUT_URL ?? "https://www.icloud.com/shortcuts/43fbfc01c53f4b4bb229c5608a9c69ac";
 
 function ApplePhotosMark({ size = 28 }: { size?: number }) {
   const colors = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#00c7be", "#007aff", "#5856d6", "#af52de"];
