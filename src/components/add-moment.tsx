@@ -41,9 +41,38 @@ function ApplePhotosMark({ size = 28 }: { size?: number }) {
 }
 
 function LocalMediaThumbnail({ file }: { file: File }) {
-  const [url] = useState(() => URL.createObjectURL(file));
+  const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    void (async () => {
+      try {
+        if (file.type.startsWith("video/")) {
+          objectUrl = URL.createObjectURL(file);
+        } else {
+          const heic = /\.hei[cf]$/i.test(file.name) || file.type === "image/heic" || file.type === "image/heif";
+          const bitmap: ImageBitmap = heic
+            ? await import("heic-to/next").then(({ heicTo }) => heicTo({ blob: file, type: "bitmap", options: { imageOrientation: "from-image" } }))
+            : await createImageBitmap(file, { imageOrientation: "from-image" });
+          try {
+            const scale = Math.min(1, 104 / Math.max(bitmap.width, bitmap.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+            canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+            const context = canvas.getContext("2d", { alpha: false });
+            if (!context) throw new Error("Preview unavailable.");
+            context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Preview unavailable.")), "image/webp", .72));
+            objectUrl = URL.createObjectURL(blob);
+          } finally { bitmap.close(); }
+        }
+        if (active) setUrl(objectUrl);
+        else if (objectUrl) URL.revokeObjectURL(objectUrl);
+      } catch { if (active) setFailed(true); }
+    })();
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [file]);
   if (!url || failed) return <span className="local-media-fallback"><ImagePlus size={17} /></span>;
   return file.type.startsWith("video/")
     ? <video className="local-media-thumbnail" src={url} muted playsInline preload="metadata" aria-hidden="true" onError={() => setFailed(true)} />
@@ -184,6 +213,7 @@ export function AddMoment({ tripId, slug }: Props) {
     const capturedFiles = [...files];
     setMode("upload");
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    document.documentElement.classList.add("camera-capture-active");
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     dialogRef.current?.showModal();
     await addFiles(capturedFiles);
@@ -287,7 +317,7 @@ export function AddMoment({ tripId, slug }: Props) {
       <button className="floating-add floating-camera" type="button" aria-label="Open camera" title="Open camera" onClick={() => cameraInputRef.current?.click()}><Camera size={19} /></button>
       <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => { void addCameraCapture(event.target.files); event.target.value = ""; }} />
     </div>
-    <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setMessage("")}>
+    <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => { setMessage(""); document.documentElement.classList.remove("camera-capture-active"); }}>
       <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Add to the journey"}</h2></div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
       {!publishingIds.length ? <div className="moment-tabs" role="tablist"><button type="button" role="tab" aria-selected={mode === "upload"} onClick={() => setMode("upload")}><ImagePlus size={16} /> Photos & videos</button><button type="button" role="tab" aria-selected={mode === "checkin"} onClick={() => setMode("checkin")}><MapPin size={16} /> Check in</button></div> : null}
       {mode === "upload" ? <div>
