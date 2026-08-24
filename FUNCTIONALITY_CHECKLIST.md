@@ -98,7 +98,7 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 
 ### Photo and video uploads
 
-- [~] A camera-only floating action beside Add moment opens the device's native rear camera and sends the photo into the normal date/caption/publishing flow; physical iPhone and Android capture remain to be verified.
+- [~] A camera-only floating action beside Add moment opens the device's native rear camera and sends the photo into the normal date/caption/publishing flow. The return transition releases camera focus before opening the modal and disables its GPU-heavy backdrop blur on mobile to avoid iOS compositor corruption; physical iPhone and Android retesting remains.
 - [~] Add moment uses the native Apple Photos picker on iPhone/iPad and supports multi-select plus desktop drag/drop; a physical-device batch pass remains.
 - [~] Each uploaded photo/video offers Google place autocomplete and manual latitude/longitude entry; when no place is selected, approved Google reverse-geocoding converts manual or EXIF GPS coordinates into a stored city/country label used by the timeline and Trip Story. Live EXIF and manual-coordinate fixtures remain to be verified.
 - [~] Supported file types are validated; photos remain below the effective 50 MB Storage limit and videos are locally transcoded to 720p H.264/AAC at a reduced bitrate before upload. Raw Supabase/TUS errors are replaced with concise user-facing messages. Physical iPhone video compression remains to be verified.

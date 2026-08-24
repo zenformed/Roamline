@@ -181,9 +181,12 @@ export function AddMoment({ tripId, slug }: Props) {
 
   async function addCameraCapture(files: FileList | null) {
     if (!files?.length) return;
+    const capturedFiles = [...files];
     setMode("upload");
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
     dialogRef.current?.showModal();
-    await addFiles(files);
+    await addFiles(capturedFiles);
   }
 
   async function resumableUpload(file: File, path: string, itemId: string) {
