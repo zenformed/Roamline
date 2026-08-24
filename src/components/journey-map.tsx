@@ -45,7 +45,11 @@ export function JourneyMap({ points }: { points: JourneyPoint[] }) {
         const id = (event as CustomEvent<string>).detail;
         const marker = markers.get(id);
         const position = marker?.getPosition();
-        if (position) { map.panTo(position); map.setZoom(Math.max(map.getZoom() ?? 13, 13)); }
+        if (position) {
+          elementRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          map.panTo(position);
+          map.setZoom(Math.max(map.getZoom() ?? 13, 13));
+        }
       };
       window.addEventListener("roamline:focus-map", focusHandler);
     }).catch(() => setError("The map could not load. Check the Google Maps key and website restrictions."));

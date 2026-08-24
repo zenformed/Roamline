@@ -8,12 +8,14 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 
 import { notifyTripFollowers, refreshTrip } from "@/app/trip/[slug]/actions";
+import { CompanionPicker } from "@/components/companion-picker";
 import { PlaceSearch, SelectedPlace } from "@/components/place-search";
 import { createClient } from "@/lib/supabase/client";
 import { loadGeocoding } from "@/lib/google-maps";
 import { prepareMedia } from "@/lib/media-derivatives";
 
-type Props = { tripId: string; slug: string };
+type Traveler = { id: string; display_name: string };
+type Props = { tripId: string; slug: string; currentUserId: string; travelers: Traveler[] };
 type UploadItem = {
   id: string;
   file: File;
@@ -131,7 +133,7 @@ async function cityCountry(latitude: number, longitude: number) {
   } catch { return ""; }
 }
 
-export function AddMoment({ tripId, slug }: Props) {
+export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -145,6 +147,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const [publishingIds, setPublishingIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [checkinFiles, setCheckinFiles] = useState<File[]>([]);
+  const [companionIds, setCompanionIds] = useState<string[]>([]);
   const [selectedPlace, setSelectedPlace] = useState({ id: "", name: "", address: "", latitude: "", longitude: "" });
   const [isAppleMobile, setIsAppleMobile] = useState(false);
   const selectPlace = useCallback((place: SelectedPlace) => setSelectedPlace({ ...place, latitude: String(place.latitude), longitude: String(place.longitude) }), []);
@@ -293,6 +296,10 @@ export function AddMoment({ tripId, slug }: Props) {
     const occurredAt = new Date(String(form.get("occurredAt"))).toISOString();
     const { data: checkin, error } = await supabase.from("checkins").insert({ trip_id: tripId, author_id: user.id, place_id: String(form.get("placeId") || "").trim() || null, place_name: String(form.get("placeName") || "").trim(), formatted_address: String(form.get("address") || "").trim() || null, latitude: Number(form.get("latitude")), longitude: Number(form.get("longitude")), occurred_at: occurredAt, note: String(form.get("note") || "").trim() || null }).select("id").single();
     if (error || !checkin) { setBusy(false); setMessage(error?.message ?? "The check-in could not be created."); return; }
+    if (companionIds.length) {
+      const { error: companionError } = await supabase.from("checkin_attendees").insert(companionIds.map((userId) => ({ checkin_id: checkin.id, user_id: userId })));
+      if (companionError) { await supabase.from("checkins").delete().eq("id", checkin.id); setBusy(false); setMessage("The companions could not be added. Please try again."); return; }
+    }
     for (const file of checkinFiles) {
       try {
         const prepared = await prepareMedia(file);
@@ -308,7 +315,7 @@ export function AddMoment({ tripId, slug }: Props) {
       } catch { /* Keep the check-in even if one attachment fails. */ }
     }
     await notifyTripFollowers(tripId, "checkin");
-    setBusy(false); setCheckinFiles([]); setSelectedPlace({ id: "", name: "", address: "", latitude: "", longitude: "" }); formElement.reset(); await showLatestTrip(); dialogRef.current?.close();
+    setBusy(false); setCheckinFiles([]); setCompanionIds([]); setSelectedPlace({ id: "", name: "", address: "", latitude: "", longitude: "" }); formElement.reset(); await showLatestTrip(); dialogRef.current?.close();
   }
 
   return <>
@@ -343,6 +350,7 @@ export function AddMoment({ tripId, slug }: Props) {
         <div className="coordinate-grid"><label><span>Latitude</span><input name="latitude" required type="number" min="-90" max="90" step="any" placeholder="35.6984" value={selectedPlace.latitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", latitude: event.target.value }))} /></label><label><span>Longitude</span><input name="longitude" required type="number" min="-180" max="180" step="any" placeholder="139.7731" value={selectedPlace.longitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", longitude: event.target.value }))} /></label></div>
         <label><span>Date and time</span><input name="occurredAt" required type="datetime-local" defaultValue={localDateTime()} /></label>
         <label><span>Note (optional)</span><textarea name="note" maxLength={1200} placeholder="What happened here?" /></label>
+        {travelers.some((traveler) => traveler.id !== currentUserId) ? <CompanionPicker travelers={travelers.filter((traveler) => traveler.id !== currentUserId)} selectedIds={companionIds} onChange={setCompanionIds} /> : null}
         <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => isAcceptedFile(file) && file.size <= (file.type.startsWith("video/") ? MAX_SOURCE_VIDEO_SIZE : MAX_UPLOAD_SIZE))]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>
       </form>}
