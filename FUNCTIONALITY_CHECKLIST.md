@@ -109,6 +109,10 @@ These controls exist in the first visual shell and must be wired, disabled, or r
 - [x] Every primary photo/video uses Supabase's TUS resumable upload endpoint with automatic network retries and sequential batch processing.
 - [~] Before publishing, each file appears as a collapsed local photo/video thumbnail and filename; tapping the row reveals only its date and optional caption. Publishing then shows aggregate progress and failures; a physical iPhone preview pass remains.
 - [~] Batch upload tracks per-file and aggregate progress, retries failed items without re-uploading completed items, warns before leaving, and requests a screen wake lock while publishing; physical iPhone interruption testing remains.
+
+### Day summaries
+
+- [~] Each populated timeline day ends with a left-aligned “Summarize Your Day” editor for trip owners/contributors, limited to one editable summary per person per day. Viewers see saved summaries as the author's display name followed by their text. The production migration, RLS, save/update/delete actions, and responsive UI are implemented; live multi-user verification remains.
 - [~] EXIF capture time and GPS are extracted when present; fixture verification remains.
 - [~] Browser-available video dimensions and duration are extracted; embedded video GPS is not yet supported.
 - [x] Missing or stripped GPS metadata is clearly indicated.

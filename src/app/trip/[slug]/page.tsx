@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { AddMoment } from "@/components/add-moment";
 import { CheckinCard } from "@/components/checkin-card";
+import { DaySummary } from "@/components/day-summary";
 import { FollowTrip } from "@/components/follow-trip";
 import { HeaderNavigation } from "@/components/header-navigation";
 import { JourneyMap } from "@/components/journey-map";
@@ -19,6 +20,7 @@ type Media = { id: string; uploader_id: string; storage_path: string; thumbnail_
 type Reaction = { media_id: string; emoji: string };
 type Traveler = { id: string; display_name: string };
 type Invitation = { id: string; token: string; expires_at: string };
+type DaySummaryRecord = { id: string; summary_date: string; author_id: string; body: string; profiles: { display_name: string }[] };
 
 const AVATAR_COLORS = ["#dce8ff", "#ffe0da", "#dff1e5", "#eee1ff", "#fff0c7", "#d9eef2", "#f3ddea", "#e7e5d5"];
 function initials(name: string) { const parts = name.trim().split(/\s+/).filter(Boolean); return `${parts[0]?.[0] ?? "T"}${parts.length > 1 ? parts.at(-1)?.[0] ?? "" : ""}`.toUpperCase(); }
@@ -53,12 +55,13 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
   const { data: tripData } = await supabase.from("trips").select("id,owner_id,name,slug,description,start_date,end_date,status,visibility").eq("slug", slug).maybeSingle();
   if (!tripData) notFound();
   const trip = tripData as Trip;
-  const [{ data: checkinData }, { data: mediaData }, { data: memberData }, { data: userData }, { data: reactionData }] = await Promise.all([
+  const [{ data: checkinData }, { data: mediaData }, { data: memberData }, { data: userData }, { data: reactionData }, { data: summaryData }] = await Promise.all([
     supabase.from("checkins").select("id,author_id,place_id,place_name,formatted_address,note,occurred_at,latitude,longitude").eq("trip_id", trip.id).order("occurred_at", { ascending: false }),
     supabase.from("media").select("id,uploader_id,storage_path,thumbnail_storage_path,caption,kind,captured_at,created_at,place_name,latitude,longitude").eq("trip_id", trip.id).order("captured_at", { ascending: false, nullsFirst: false }),
     supabase.from("trip_members").select("user_id").eq("trip_id", trip.id),
     supabase.auth.getUser(),
     supabase.from("reactions").select("media_id,emoji"),
+    supabase.from("day_summaries").select("id,summary_date,author_id,body,profiles!day_summaries_author_id_fkey(display_name)").eq("trip_id", trip.id).order("created_at", { ascending: true }),
   ]);
   const checkins = (checkinData ?? []) as Checkin[];
   const media = (mediaData ?? []) as Media[];
@@ -73,6 +76,8 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
   const travelers = (travelerData ?? []) as Traveler[];
   const avatarColors = travelerColors(travelers);
   const canContribute = Boolean(userData.user && (trip.owner_id === userData.user.id || memberData?.some((member) => member.user_id === userData.user.id)));
+  const summariesByDate = new Map<string, DaySummaryRecord[]>();
+  for (const summary of (summaryData ?? []) as DaySummaryRecord[]) summariesByDate.set(summary.summary_date, [...(summariesByDate.get(summary.summary_date) ?? []), summary]);
   const dayMap = new Map<string, { date: Date; checkins: Checkin[]; media: typeof mediaWithUrls }>();
   for (const checkin of checkins) {
     const date = new Date(checkin.occurred_at); const key = timelineDateKey(date);
@@ -99,6 +104,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         <header className="day-heading"><div className="date-tile"><strong>{new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(day.date)}</strong><span>{new Intl.DateTimeFormat("en-US", { month: "short" }).format(day.date).toUpperCase()}</span></div><div><span>{new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(day.date)}</span><h2>{new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(day.date)}</h2><p>{day.checkins.length + day.media.length} {day.checkins.length + day.media.length === 1 ? "moment" : "moments"}</p></div></header>
         {day.checkins.map((checkin) => <CheckinCard key={checkin.id} slug={trip.slug} canManage={Boolean(userId && (userId === trip.owner_id || (canContribute && userId === checkin.author_id)))} checkin={{ id: checkin.id, placeId: checkin.place_id, placeName: checkin.place_name, address: checkin.formatted_address, note: checkin.note, occurredAt: checkin.occurred_at, latitude: checkin.latitude, longitude: checkin.longitude }} />)}
         {day.media.length > 0 ? <MediaGallery slug={trip.slug} userId={userId} returnTo={`/trip/${trip.slug}`} items={day.media.filter((item): item is typeof item & { url: string } => Boolean(item.url)).map((item) => ({ id: item.id, storagePath: item.storage_path, thumbnailStoragePath: item.thumbnail_storage_path, url: item.url, thumbnailUrl: item.thumbnailUrl ?? item.url, caption: item.caption, kind: item.kind, capturedAt: item.captured_at, placeName: item.place_name, latitude: item.latitude, longitude: item.longitude, reactions: reactionsByMedia.get(item.id) ?? [], canManage: Boolean(userId && (userId === trip.owner_id || (canContribute && userId === item.uploader_id))) }))} /> : null}
+        <DaySummary tripId={trip.id} slug={trip.slug} date={timelineDateKey(day.date)} canContribute={canContribute} userId={userId} userName={travelers.find((traveler) => traveler.id === userId)?.display_name ?? null} summaries={(summariesByDate.get(timelineDateKey(day.date)) ?? []).map((summary) => ({ id: summary.id, authorId: summary.author_id, authorName: summary.profiles[0]?.display_name ?? "Traveler", body: summary.body }))} />
       </section>)}</>}
     </section></MediaSelectionProvider>
     {canContribute ? <AddMoment tripId={trip.id} slug={trip.slug} /> : userId ? null : <Link className="floating-add" href={`/login?returnTo=${encodeURIComponent(`/trip/${trip.slug}`)}`}><Plus size={17} /> Sign in to add</Link>}
