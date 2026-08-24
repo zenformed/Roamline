@@ -1,7 +1,7 @@
 "use client";
 
 import { parse } from "exifr";
-import { ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
+import { Camera, ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -107,6 +107,7 @@ export function AddMoment({ tripId, slug }: Props) {
   const supabase = createClient();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"upload" | "checkin">("upload");
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -176,6 +177,13 @@ export function AddMoment({ tripId, slug }: Props) {
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "ready", ...size } : entry));
       }
     }
+  }
+
+  async function addCameraCapture(files: FileList | null) {
+    if (!files?.length) return;
+    setMode("upload");
+    dialogRef.current?.showModal();
+    await addFiles(files);
   }
 
   async function resumableUpload(file: File, path: string, itemId: string) {
@@ -271,7 +279,11 @@ export function AddMoment({ tripId, slug }: Props) {
   }
 
   return <>
-    <button className="floating-add" type="button" onClick={() => dialogRef.current?.showModal()}><Plus size={17} /> Add moment</button>
+    <div className="trip-floating-actions">
+      <button className="floating-add" type="button" onClick={() => dialogRef.current?.showModal()}><Plus size={17} /> Add moment</button>
+      <button className="floating-add floating-camera" type="button" aria-label="Open camera" title="Open camera" onClick={() => cameraInputRef.current?.click()}><Camera size={19} /></button>
+      <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => { void addCameraCapture(event.target.files); event.target.value = ""; }} />
+    </div>
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setMessage("")}>
       <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Add to the journey"}</h2></div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
       {!publishingIds.length ? <div className="moment-tabs" role="tablist"><button type="button" role="tab" aria-selected={mode === "upload"} onClick={() => setMode("upload")}><ImagePlus size={16} /> Photos & videos</button><button type="button" role="tab" aria-selected={mode === "checkin"} onClick={() => setMode("checkin")}><MapPin size={16} /> Check in</button></div> : null}
