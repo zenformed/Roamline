@@ -46,7 +46,7 @@ export function DaySummary({ tripId, slug, date, summaries: initialSummaries, ca
     {canContribute ? <form onSubmit={save}>
       <label htmlFor={`day-summary-${date}`}>Summarize Your Day</label>
       <textarea id={`day-summary-${date}`} maxLength={2000} rows={3} placeholder="What made today memorable?" value={body} onChange={(event) => setBody(event.target.value)} />
-      <div className="day-summary-actions"><button type="submit" disabled={busy || !body.trim()}>{busy ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />} {ownSummary ? "Save changes" : "Save summary"}</button>{ownSummary ? <button className="day-summary-remove" type="button" disabled={busy} onClick={() => void remove()}><Trash2 size={14} /> Remove</button> : null}</div>
+      <div className="day-summary-actions"><button type="submit" aria-label={ownSummary ? "Save summary changes" : "Save summary"} title={ownSummary ? "Save changes" : "Save summary"} disabled={busy || !body.trim()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}</button>{ownSummary ? <button className="day-summary-remove" type="button" aria-label="Delete day summary" title="Delete summary" disabled={busy} onClick={() => void remove()}><Trash2 size={16} /></button> : null}</div>
       {message ? <p className={message.includes("saved") || message.includes("removed") ? "success" : "error"} role="status">{message}</p> : null}
     </form> : null}
     {visibleSummaries.length ? <div className="day-summary-list">{visibleSummaries.map((summary) => <article key={summary.id}><strong>{summary.authorName}</strong><p>{summary.body}</p></article>)}</div> : null}
