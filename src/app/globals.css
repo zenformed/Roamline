@@ -11,8 +11,8 @@
   --accent-dark: #c63a27;
 }
 
-.place-preview-dialog { position: fixed; inset: 0; margin: auto; width: min(680px, calc(100% - 28px)); height: min(780px, calc(100dvh - 28px)); padding: 0; border: 0; border-radius: 18px; overflow: hidden; color: var(--foreground); background: var(--surface); box-shadow: 0 28px 100px rgba(0,0,0,.38); }
-.place-preview-dialog::backdrop { background: rgba(18,18,17,.65); backdrop-filter: blur(5px); }
+.place-preview-dialog { position: fixed; inset: 0; margin: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; padding: 0; border: 0; border-radius: 0; overflow: hidden; color: var(--foreground); background: var(--surface); }
+.place-preview-dialog::backdrop { background: var(--surface); }
 .place-preview-card { position: relative; height: 100%; display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; background: var(--surface); }
 .place-preview-close { position: absolute; z-index: 2; top: 12px; right: 12px; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; color: #fff; background: rgba(18,18,17,.72); backdrop-filter: blur(8px); cursor: pointer; }
 .place-preview-map { width: 100%; height: 100%; background: color-mix(in srgb, var(--foreground) 7%, var(--surface)); }
