@@ -24,7 +24,7 @@
 .moment-composer-author { display: flex; align-items: center; gap: 10px; }
 .moment-composer-author > span { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #dce8ff; color: #292927; font-size: 11px; font-weight: 700; }
 .moment-composer-author strong { font-size: 13px; }
-.moment-composer textarea { width: 100%; min-height: 190px; padding: 0; border: 0; resize: vertical; outline: 0; background: transparent; color: var(--foreground); font: 400 20px/1.5 var(--font-geist-sans), sans-serif; }
+.moment-composer textarea { box-sizing: border-box; width: 100%; min-height: 190px; padding: 10px 12px; border: 0; resize: vertical; outline: 0; background: transparent; color: var(--foreground); font: 400 20px/1.5 var(--font-geist-sans), sans-serif; }
 .moment-composer textarea::placeholder { color: var(--muted); }
 .moment-composer-bar { min-height: 58px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .moment-composer-bar > span { font-size: 12px; font-weight: 620; }
