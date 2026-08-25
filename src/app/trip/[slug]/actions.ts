@@ -14,19 +14,22 @@ export async function refreshTrip(slug: string) {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-export async function saveDaySummary(tripId: string, slug: string, summaryDate: string, body: string) {
+export async function saveDaySummary(tripId: string, slug: string, summaryDate: string, body: string, occurredAt?: string) {
   const cleanBody = body.trim();
-  if (!UUID_PATTERN.test(tripId) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || !DATE_PATTERN.test(summaryDate) || !cleanBody || cleanBody.length > 2000) return { error: "Enter a summary of up to 2,000 characters." };
+  const parsedOccurredAt = occurredAt ? new Date(occurredAt) : null;
+  if (!UUID_PATTERN.test(tripId) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || !DATE_PATTERN.test(summaryDate) || !cleanBody || cleanBody.length > 2000 || (parsedOccurredAt && Number.isNaN(parsedOccurredAt.getTime()))) return { error: "Enter a summary of up to 2,000 characters." };
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Sign in to summarize this day." };
-  const { data, error } = await supabase.from("day_summaries").upsert({
+  const values = {
     trip_id: tripId,
     summary_date: summaryDate,
     author_id: userData.user.id,
     body: cleanBody,
     updated_at: new Date().toISOString(),
-  }, { onConflict: "trip_id,summary_date,author_id" }).select("id,body,author_id,summary_date").single();
+    ...(parsedOccurredAt ? { occurred_at: parsedOccurredAt.toISOString() } : {}),
+  };
+  const { data, error } = await supabase.from("day_summaries").upsert(values, { onConflict: "trip_id,summary_date,author_id" }).select("id,body,author_id,summary_date,occurred_at").single();
   if (error || !data) return { error: "Your day summary could not be saved." };
   revalidatePath(`/trip/${slug}`);
   return { summary: data };

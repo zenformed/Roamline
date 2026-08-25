@@ -20,7 +20,7 @@ type Media = { id: string; uploader_id: string; storage_path: string; thumbnail_
 type Reaction = { media_id: string; emoji: string };
 type Traveler = { id: string; display_name: string };
 type Invitation = { id: string; token: string; expires_at: string };
-type DaySummaryRecord = { id: string; summary_date: string; author_id: string; body: string; created_at: string; profiles: { display_name: string }[] };
+type DaySummaryRecord = { id: string; summary_date: string; author_id: string; body: string; created_at: string; occurred_at: string; profiles: { display_name: string }[] };
 type CheckinAttendee = { checkin_id: string; user_id: string };
 
 const AVATAR_COLORS = ["#dce8ff", "#ffe0da", "#dff1e5", "#eee1ff", "#fff0c7", "#d9eef2", "#f3ddea", "#e7e5d5"];
@@ -62,7 +62,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     supabase.from("trip_members").select("user_id").eq("trip_id", trip.id),
     supabase.auth.getUser(),
     supabase.from("reactions").select("media_id,emoji"),
-    supabase.from("day_summaries").select("id,summary_date,author_id,body,created_at,profiles!day_summaries_author_id_fkey(display_name)").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+    supabase.from("day_summaries").select("id,summary_date,author_id,body,created_at,occurred_at,profiles!day_summaries_author_id_fkey(display_name)").eq("trip_id", trip.id).order("occurred_at", { ascending: true }),
   ]);
   const checkins = (checkinData ?? []) as Checkin[];
   const { data: attendeeData } = checkins.length ? await supabase.from("checkin_attendees").select("checkin_id,user_id").in("checkin_id", checkins.map((checkin) => checkin.id)) : { data: [] };
@@ -113,7 +113,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         <header className="day-heading"><div className="date-tile"><strong>{new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(day.date)}</strong><span>{new Intl.DateTimeFormat("en-US", { month: "short" }).format(day.date).toUpperCase()}</span></div><div><span>{new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(day.date)}</span><h2>{new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(day.date)}</h2><p>{day.checkins.length + day.media.length} {day.checkins.length + day.media.length === 1 ? "moment" : "moments"}</p></div></header>
         <div className={`day-story-card day-post-card${day.checkins.length ? " has-checkins" : ""}${day.media.length ? " has-media" : ""}${!day.checkins.length && !daySummaries.length ? " media-only" : ""}`}>
           <div className="day-post-copy">
-            {!day.checkins.length && summaryAuthor ? <div className="summary-post-author"><span className="post-avatar" style={{ backgroundColor: avatarColorById.get(summaryAuthor.id) }}>{initials(summaryAuthor.display_name)}</span><div><strong>{summaryAuthor.display_name}</strong><time>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(daySummaries[0].created_at))}</time></div></div> : null}
+            {!day.checkins.length && summaryAuthor ? <div className="summary-post-author"><span className="post-avatar" style={{ backgroundColor: avatarColorById.get(summaryAuthor.id) }}>{initials(summaryAuthor.display_name)}</span><div><strong>{summaryAuthor.display_name}</strong><time>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(daySummaries[0].occurred_at))}</time></div></div> : null}
             {day.checkins.map((checkin) => { const author = travelerById.get(checkin.author_id); return <CheckinCard key={checkin.id} slug={trip.slug} postStyle authorId={checkin.author_id} authorName={author?.display_name ?? "Traveler"} authorColor={avatarColorById.get(checkin.author_id)} travelers={travelers} attendeeIds={attendeesByCheckin.get(checkin.id) ?? []} canManage={Boolean(userId && (userId === trip.owner_id || (canContribute && userId === checkin.author_id)))} checkin={{ id: checkin.id, placeId: checkin.place_id, placeName: checkin.place_name, address: checkin.formatted_address, note: checkin.note, occurredAt: checkin.occurred_at, latitude: checkin.latitude, longitude: checkin.longitude }} /> })}
             <DaySummary tripId={trip.id} slug={trip.slug} date={dayKey} canContribute={summaryCanContribute} userId={userId} userName={travelers.find((traveler) => traveler.id === userId)?.display_name ?? null} summaries={daySummaries.map((summary) => ({ id: summary.id, authorId: summary.author_id, authorName: summary.profiles[0]?.display_name ?? "Traveler", body: summary.body }))} />
           </div>

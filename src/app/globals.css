@@ -23,7 +23,7 @@
 .moment-composer { display: grid; gap: 18px; margin: 18px 20px 20px; }
 .moment-composer-author { display: flex; align-items: center; gap: 10px; }
 .moment-composer-author > span { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #dce8ff; color: #292927; font-size: 11px; font-weight: 700; }
-.moment-composer-author strong { font-size: 13px; }
+.moment-composer-author > div { display: grid; justify-items: start; gap: 3px; }.moment-composer-author strong { font-size: 13px; }.moment-composer-author button { padding: 0; border: 0; display: flex; align-items: center; gap: 5px; background: transparent; color: var(--muted); font: 500 10px var(--font-geist-sans), sans-serif; cursor: pointer; }.moment-composer-author button:hover { color: var(--foreground); }
 .moment-composer textarea { box-sizing: border-box; width: 100%; min-height: 190px; padding: 10px 12px; border: 0; resize: vertical; outline: 0; background: transparent; color: var(--foreground); font: 400 20px/1.5 var(--font-geist-sans), sans-serif; }
 .moment-composer textarea::placeholder { color: var(--muted); }
 .moment-composer-bar { min-height: 58px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
@@ -34,6 +34,7 @@
 .moment-composer-bar > div > button:last-child { color: var(--accent); }
 .moment-composer-bar button:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
 .companion-field.is-compact { position: relative; display: block; }.companion-field.is-compact .companion-open { position: relative; width: 42px; min-height: 42px; padding: 0; border: 0; border-radius: 50%; justify-content: center; color: #2879db; background: transparent; }.companion-field.is-compact .companion-open b { position: absolute; top: 1px; right: 0; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; display: grid; place-items: center; background: #1677ff; color: white; font-size: 8px; line-height: 1; }
+.moment-datetime-dialog { position: fixed; inset: 0; margin: auto; width: min(430px, calc(100% - 30px)); padding: 0; overflow: hidden; border: 0; border-radius: 16px; background: var(--surface); color: var(--foreground); box-shadow: 0 28px 100px rgba(0,0,0,.3); }.moment-datetime-dialog::backdrop { background: rgba(18,18,17,.6); backdrop-filter: blur(4px); }.moment-datetime-fields { display: grid; gap: 13px; padding: 20px 20px 18px; }.moment-datetime-fields label { display: grid; gap: 7px; }.moment-datetime-fields label > span { color: var(--muted); font-size: 10px; font-weight: 620; }.moment-datetime-fields input { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; padding: 0 13px; border: 1px solid var(--border); border-radius: 9px; outline: 0; background: var(--surface); color: var(--foreground); font: 500 13px var(--font-geist-sans), sans-serif; color-scheme: light dark; }.moment-datetime-fields input:focus { border-color: #92918b; box-shadow: 0 0 0 3px rgba(0,0,0,.05); }
 .moment-composer-publish { width: 100%; justify-content: center; }
 
 [data-theme="dark"] {

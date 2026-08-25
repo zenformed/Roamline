@@ -1,7 +1,7 @@
 "use client";
 
 import { parse } from "exifr";
-import { ArrowLeft, Camera, ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -137,11 +137,13 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const dateTimeDialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"compose" | "upload" | "checkin">("compose");
   const [summary, setSummary] = useState("");
+  const [momentOccurredAt, setMomentOccurredAt] = useState(() => localDateTime());
   const [items, setItems] = useState<UploadItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -186,8 +188,8 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
     const body = summary.trim();
     if (!body) return;
     setBusy(true); setMessage("");
-    const today = localDateTime().slice(0, 10);
-    const result = await saveDaySummary(tripId, slug, today, body);
+    const summaryDate = momentOccurredAt.slice(0, 10);
+    const result = await saveDaySummary(tripId, slug, summaryDate, body, new Date(momentOccurredAt).toISOString());
     setBusy(false);
     if (!result.summary) { setMessage(result.error ?? "Your summary could not be saved."); return; }
     setSummary(""); await showLatestTrip(); dialogRef.current?.close();
@@ -345,7 +347,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => { setMessage(""); document.documentElement.classList.remove("camera-capture-active"); }}>
       <div className="dialog-head"><div>{mode !== "compose" && !publishingIds.length ? <button className="composer-back" type="button" onClick={() => setMode("compose")}><ArrowLeft size={17} /> Add moment</button> : <><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Create moment"}</h2></>}</div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
       {mode === "compose" ? <section className="moment-composer">
-        <div className="moment-composer-author"><span>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("") || "T"}</span><strong>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name || "Traveler"}</strong></div>
+        <div className="moment-composer-author"><span>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("") || "T"}</span><div><strong>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name || "Traveler"}</strong><button type="button" onClick={() => dateTimeDialogRef.current?.showModal()}>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(momentOccurredAt))}<CalendarDays size={13} /></button></div></div>
         <textarea autoFocus maxLength={2000} placeholder="Summarize your day…" value={summary} onChange={(event) => setSummary(event.target.value)} />
         <div className="moment-composer-bar"><span>Add to your moment</span><div><button type="button" aria-label="Add photos or videos" title="Photos and videos" onClick={() => setMode("upload")}><ImagePlus size={22} /></button>{travelers.some((traveler) => traveler.id !== currentUserId) ? <CompanionPicker compact travelers={travelers.filter((traveler) => traveler.id !== currentUserId)} selectedIds={companionIds} onChange={setCompanionIds} /> : null}<button type="button" aria-label="Add a location" title="Location" onClick={() => setMode("checkin")}><MapPin size={22} /></button></div></div>
         <button className="primary-button moment-composer-publish" type="button" disabled={busy || !summary.trim()} onClick={() => void publishSummary()}>{busy ? <LoaderCircle className="spin" size={16} /> : null} Post</button>
@@ -376,6 +378,11 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>
       </form>}
       {message ? <p className={`dialog-message ${message === "Check-in added." || message.includes("published") ? "success" : ""}`} role="status">{message}</p> : null}
+    </dialog>
+    <dialog className="moment-datetime-dialog" ref={dateTimeDialogRef}>
+      <div className="companion-dialog-head"><h2>Date and time</h2><button type="button" aria-label="Close date and time picker" onClick={() => dateTimeDialogRef.current?.close()}><X size={19} /></button></div>
+      <div className="moment-datetime-fields"><label><span>Date</span><input type="date" value={momentOccurredAt.slice(0, 10)} onChange={(event) => setMomentOccurredAt((current) => updateDate(event.target.value, current))} /></label><label><span>Time</span><input type="time" value={momentOccurredAt.slice(11, 16)} onChange={(event) => setMomentOccurredAt((current) => `${current.slice(0, 10)}T${event.target.value}`)} /></label></div>
+      <button className="companion-done" type="button" onClick={() => dateTimeDialogRef.current?.close()}>Done</button>
     </dialog>
   </>;
 }
