@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Search, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Check, Search, UserPlus, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 type Traveler = { id: string; display_name: string };
@@ -22,7 +22,7 @@ export function CompanionPicker({ travelers, selectedIds, onChange, label = "Who
     <button className="companion-open" type="button" aria-label={selected.length ? `Edit people · ${selected.length} selected` : "Add people"} title="Add people" onClick={() => { setQuery(""); dialogRef.current?.showModal(); }}><UserPlus size={compact ? 22 : 16} />{compact ? (selected.length ? <b>{selected.length}</b> : null) : selected.length ? selected.map((traveler) => traveler.display_name).join(", ") : "Add people"}</button>
     {!compact && selected.length ? <div className="companion-chips">{selected.map((traveler) => <span key={traveler.id}><i style={{ backgroundColor: colorFor(traveler.id) }}>{initials(traveler.display_name)}</i>{traveler.display_name}<button type="button" aria-label={`Remove ${traveler.display_name}`} onClick={() => toggle(traveler.id)}><X size={12} /></button></span>)}</div> : null}
     <dialog className="companion-dialog" ref={dialogRef} onClose={() => setQuery("")}>
-      <div className="companion-dialog-head"><h2>Add people</h2><button type="button" aria-label="Close" onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
+      <div className="companion-dialog-head"><button className="companion-back" type="button" onClick={() => dialogRef.current?.close()}><ArrowLeft size={17} /> Add People</button><button type="button" aria-label="Close and return to Create Moment" onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
       <label className="companion-search"><Search size={16} /><input autoFocus type="search" placeholder="Search collaborators" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="companion-results"><span>Collaborators</span>{results.length ? results.map((traveler) => { const isSelected = selectedIds.includes(traveler.id); return <button type="button" className={isSelected ? "is-selected" : ""} key={traveler.id} onClick={() => toggle(traveler.id)}><i style={{ backgroundColor: colorFor(traveler.id) }}>{initials(traveler.display_name)}</i><strong>{traveler.display_name}</strong><b>{isSelected ? <Check size={15} strokeWidth={3} /> : null}</b></button>; }) : <p>No collaborators found.</p>}</div>
       <button className="companion-done" type="button" onClick={() => dialogRef.current?.close()}>Done{selectedIds.length ? ` · ${selectedIds.length} selected` : ""}</button>

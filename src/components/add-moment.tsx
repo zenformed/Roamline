@@ -184,6 +184,11 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
     dialogRef.current?.showModal();
   }
 
+  function closeCurrentView() {
+    if (mode !== "compose" && !publishingIds.length) { setMode("compose"); setMessage(""); return; }
+    dialogRef.current?.close();
+  }
+
   async function publishSummary() {
     const body = summary.trim();
     if (!body) return;
@@ -345,7 +350,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
       <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => { void addCameraCapture(event.target.files); event.target.value = ""; }} />
     </div>
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => { setMessage(""); document.documentElement.classList.remove("camera-capture-active"); }}>
-      <div className="dialog-head"><div>{mode !== "compose" && !publishingIds.length ? <button className="composer-back" type="button" onClick={() => setMode("compose")}><ArrowLeft size={17} /> Add moment</button> : <><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Create moment"}</h2></>}</div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
+      <div className="dialog-head"><div>{mode !== "compose" && !publishingIds.length ? <button className="composer-back" type="button" onClick={() => setMode("compose")}><ArrowLeft size={17} /> {mode === "upload" ? "Add Photos/Videos" : "Check in"}</button> : <><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Create moment"}</h2></>}</div><button className="icon-button" type="button" aria-label={mode === "compose" || publishingIds.length ? "Close" : "Close and return to Create Moment"} disabled={busy} onClick={closeCurrentView}><X size={19} /></button></div>
       {mode === "compose" ? <section className="moment-composer">
         <div className="moment-composer-author"><span>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("") || "T"}</span><div><strong>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name || "Traveler"}</strong><button type="button" onClick={() => dateTimeDialogRef.current?.showModal()}>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(momentOccurredAt))}<CalendarDays size={13} /></button></div></div>
         <textarea autoFocus maxLength={2000} placeholder="Summarize your day…" value={summary} onChange={(event) => setSummary(event.target.value)} />
