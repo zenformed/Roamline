@@ -1,13 +1,13 @@
 "use client";
 
 import { parse } from "exifr";
-import { Camera, ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
+import { ArrowLeft, Camera, ImagePlus, LoaderCircle, MapPin, Paperclip, Plus, Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 
-import { notifyTripFollowers, refreshTrip } from "@/app/trip/[slug]/actions";
+import { notifyTripFollowers, refreshTrip, saveDaySummary } from "@/app/trip/[slug]/actions";
 import { CompanionPicker } from "@/components/companion-picker";
 import { PlaceSearch, SelectedPlace } from "@/components/place-search";
 import { createClient } from "@/lib/supabase/client";
@@ -140,7 +140,8 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
-  const [mode, setMode] = useState<"upload" | "checkin">("upload");
+  const [mode, setMode] = useState<"compose" | "upload" | "checkin">("compose");
+  const [summary, setSummary] = useState("");
   const [items, setItems] = useState<UploadItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -173,6 +174,23 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
   async function showLatestTrip() {
     await refreshTrip(slug);
     router.refresh();
+  }
+
+  function openComposer() {
+    setMode("compose");
+    setMessage("");
+    dialogRef.current?.showModal();
+  }
+
+  async function publishSummary() {
+    const body = summary.trim();
+    if (!body) return;
+    setBusy(true); setMessage("");
+    const today = localDateTime().slice(0, 10);
+    const result = await saveDaySummary(tripId, slug, today, body);
+    setBusy(false);
+    if (!result.summary) { setMessage(result.error ?? "Your summary could not be saved."); return; }
+    setSummary(""); await showLatestTrip(); dialogRef.current?.close();
   }
 
   async function addFiles(files: FileList | File[]) {
@@ -320,14 +338,18 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
 
   return <>
     <div className="trip-floating-actions">
-      <button className="floating-add" type="button" onClick={() => dialogRef.current?.showModal()}><Plus size={17} /> Add moment</button>
+      <button className="floating-add" type="button" onClick={openComposer}><Plus size={17} /> Add moment</button>
       <button className="floating-add floating-camera" type="button" aria-label="Open camera" title="Open camera" onClick={() => cameraInputRef.current?.click()}><Camera size={19} /></button>
       <input ref={cameraInputRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => { void addCameraCapture(event.target.files); event.target.value = ""; }} />
     </div>
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => { setMessage(""); document.documentElement.classList.remove("camera-capture-active"); }}>
-      <div className="dialog-head"><div><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Add to the journey"}</h2></div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
-      {!publishingIds.length ? <div className="moment-tabs" role="tablist"><button type="button" role="tab" aria-selected={mode === "upload"} onClick={() => setMode("upload")}><ImagePlus size={16} /> Photos & videos</button><button type="button" role="tab" aria-selected={mode === "checkin"} onClick={() => setMode("checkin")}><MapPin size={16} /> Check in</button></div> : null}
-      {mode === "upload" ? <div>
+      <div className="dialog-head"><div>{mode !== "compose" && !publishingIds.length ? <button className="composer-back" type="button" onClick={() => setMode("compose")}><ArrowLeft size={17} /> Add moment</button> : <><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Create moment"}</h2></>}</div><button className="icon-button" type="button" aria-label="Close" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={19} /></button></div>
+      {mode === "compose" ? <section className="moment-composer">
+        <div className="moment-composer-author"><span>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("") || "T"}</span><strong>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name || "Traveler"}</strong></div>
+        <textarea autoFocus maxLength={2000} placeholder="Summarize your day…" value={summary} onChange={(event) => setSummary(event.target.value)} />
+        <div className="moment-composer-bar"><span>Add to your moment</span><div><button type="button" aria-label="Add photos or videos" title="Photos and videos" onClick={() => setMode("upload")}><ImagePlus size={22} /></button>{travelers.some((traveler) => traveler.id !== currentUserId) ? <CompanionPicker compact travelers={travelers.filter((traveler) => traveler.id !== currentUserId)} selectedIds={companionIds} onChange={setCompanionIds} /> : null}<button type="button" aria-label="Add a location" title="Location" onClick={() => setMode("checkin")}><MapPin size={22} /></button></div></div>
+        <button className="primary-button moment-composer-publish" type="button" disabled={busy || !summary.trim()} onClick={() => void publishSummary()}>{busy ? <LoaderCircle className="spin" size={16} /> : null} Post</button>
+      </section> : mode === "upload" ? <div>
         {publishingIds.length ? <section className="upload-progress-panel" aria-live="polite">
           <div className="upload-progress-icon"><Upload size={22} /></div>
           <span className="section-kicker">UPLOADING YOUR JOURNEY</span>
@@ -350,7 +372,6 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
         <div className="coordinate-grid"><label><span>Latitude</span><input name="latitude" required type="number" min="-90" max="90" step="any" placeholder="35.6984" value={selectedPlace.latitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", latitude: event.target.value }))} /></label><label><span>Longitude</span><input name="longitude" required type="number" min="-180" max="180" step="any" placeholder="139.7731" value={selectedPlace.longitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", longitude: event.target.value }))} /></label></div>
         <label><span>Date and time</span><input name="occurredAt" required type="datetime-local" defaultValue={localDateTime()} /></label>
         <label><span>Note (optional)</span><textarea name="note" maxLength={1200} placeholder="What happened here?" /></label>
-        {travelers.some((traveler) => traveler.id !== currentUserId) ? <CompanionPicker travelers={travelers.filter((traveler) => traveler.id !== currentUserId)} selectedIds={companionIds} onChange={setCompanionIds} /> : null}
         <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => isAcceptedFile(file) && file.size <= (file.type.startsWith("video/") ? MAX_SOURCE_VIDEO_SIZE : MAX_UPLOAD_SIZE))]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>
       </form>}

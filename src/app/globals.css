@@ -19,6 +19,22 @@
 .place-preview-details { min-height: 0; padding: 22px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; background: var(--surface); }
 .place-preview-image { width: 100%; height: 100%; min-height: 0; border-radius: 13px; display: grid; place-items: center; color: var(--muted); background: color-mix(in srgb, var(--foreground) 7%, var(--surface)); background-position: center; background-size: cover; }
 .place-preview-dialog h2 { margin: 0; text-align: left; font-size: clamp(21px, 4vw, 28px); line-height: 1.2; letter-spacing: -.035em; }
+.composer-back { min-height: 34px; padding: 0; border: 0; display: flex; align-items: center; gap: 7px; background: transparent; color: var(--foreground); font: 650 14px var(--font-geist-sans), sans-serif; cursor: pointer; }
+.moment-composer { display: grid; gap: 18px; margin: 18px 20px 20px; }
+.moment-composer-author { display: flex; align-items: center; gap: 10px; }
+.moment-composer-author > span { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #dce8ff; color: #292927; font-size: 11px; font-weight: 700; }
+.moment-composer-author strong { font-size: 13px; }
+.moment-composer textarea { width: 100%; min-height: 190px; padding: 0; border: 0; resize: vertical; outline: 0; background: transparent; color: var(--foreground); font: 400 20px/1.5 var(--font-geist-sans), sans-serif; }
+.moment-composer textarea::placeholder { color: var(--muted); }
+.moment-composer-bar { min-height: 58px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.moment-composer-bar > span { font-size: 12px; font-weight: 620; }
+.moment-composer-bar > div { display: flex; align-items: center; gap: 4px; }
+.moment-composer-bar button { width: 42px; height: 42px; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; color: var(--foreground); cursor: pointer; }
+.moment-composer-bar > div > button:first-child { color: #2aa866; }
+.moment-composer-bar > div > button:last-child { color: var(--accent); }
+.moment-composer-bar button:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+.companion-field.is-compact { position: relative; display: block; }.companion-field.is-compact .companion-open { position: relative; width: 42px; min-height: 42px; padding: 0; border: 0; border-radius: 50%; justify-content: center; color: #2879db; background: transparent; }.companion-field.is-compact .companion-open b { position: absolute; top: 1px; right: 0; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; display: grid; place-items: center; background: #1677ff; color: white; font-size: 8px; line-height: 1; }
+.moment-composer-publish { width: 100%; justify-content: center; }
 
 [data-theme="dark"] {
   --background: #111211;
