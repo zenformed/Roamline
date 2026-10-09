@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, MapPin, Pencil, Plus } from "lucide-react";
+import { CalendarDays, MapPin, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { AddMoment } from "@/components/add-moment";
@@ -54,6 +54,7 @@ type Media = {
 
 type Reaction = { media_id: string; emoji: string };
 type Traveler = { id: string; display_name: string };
+type Invitation = { id: string; token: string; expires_at: string };
 type DaySummaryRecord = {
   id: string;
   summary_date: string;
@@ -405,6 +406,32 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
           .maybeSingle()
       : { data: null };
 
+  const { data: invitationData } =
+    userId === trip.owner_id
+      ? await supabase
+          .from("trip_invitations")
+          .select("id,token,expires_at")
+          .eq("trip_id", trip.id)
+          .is("revoked_at", null)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false })
+      : { data: [] };
+
+  const collaborators = travelers
+    .filter((traveler) => traveler.id !== trip.owner_id)
+    .map((traveler) => ({
+      id: traveler.id,
+      displayName: traveler.display_name,
+    }));
+
+  const invitations = ((invitationData ?? []) as Invitation[]).map(
+    (invitation) => ({
+      id: invitation.id,
+      token: invitation.token,
+      expiresAt: invitation.expires_at,
+    })
+  );
+
   return (
     <main className="journey-page">
       <header className="site-header journey-header">
@@ -417,12 +444,24 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
           Roamline
         </Link>
 
-        <nav className="header-nav">
+        <nav className="header-actions" aria-label="Primary navigation">
+          <ThemeToggle />
           <HeaderNavigation
             signedIn={Boolean(userId)}
-            displayName={userId ? travelerById.get(userId)?.display_name ?? null : null}
+            displayName={
+              userId
+                ? travelerById.get(userId)?.display_name ?? userData.user?.email ?? null
+                : null
+            }
+            shareTitle={`${trip.name} on Roamline`}
+            shareTripId={trip.id}
+            shareVisibility={trip.visibility}
+            canEnableLinkSharing={userId === trip.owner_id}
+            inviteTripId={userId === trip.owner_id ? trip.id : undefined}
+            inviteUserId={userId === trip.owner_id ? userId : undefined}
+            collaborators={collaborators}
+            invitations={invitations}
           />
-          <ThemeToggle />
         </nav>
       </header>
 
@@ -433,55 +472,73 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
           </p>
 
           <div className="journey-title-row">
-            <h1>{trip.name}</h1>
+            <div className="journey-title-main">
+              <h1>{trip.name}</h1>
 
-            {userId === trip.owner_id ? (
-              <Link className="inline-edit-link" href={`/trip/${trip.slug}/edit`}>
-                <Pencil size={16} /> Edit
-              </Link>
-            ) : null}
+              {userId === trip.owner_id ? (
+                <Link
+                  className="trip-title-edit"
+                  href={`/trip/${trip.slug}/edit`}
+                  aria-label="Edit trip settings"
+                  title="Edit trip"
+                >
+                  <Pencil size={13} />
+                </Link>
+              ) : null}
+
+              {media.length > 0 ? (
+                <TripStory
+                  title={trip.name}
+                  slug={trip.slug}
+                  momentCount={media.length}
+                />
+              ) : null}
+            </div>
           </div>
 
-          {trip.description ? (
-            <p className="journey-description">{trip.description}</p>
-          ) : null}
+          <p className="journey-description">
+            {trip.description || "A new journey is about to begin."}
+          </p>
 
-          <div className="journey-meta">
-            <span>
-              <CalendarDays size={16} />
-              {tripDates(trip.start_date, trip.end_date)}
-            </span>
-
-            {trip.visibility === "private" ? (
-              <span>
-                <MapPin size={16} />
-                Private trip
-              </span>
-            ) : (
-              <span>
-                <MapPin size={16} />
-                Shared trip
-              </span>
-            )}
-          </div>
+          <p className="trip-date-line">
+            <CalendarDays size={14} />
+            {tripDates(trip.start_date, trip.end_date)}
+          </p>
         </div>
 
-        <div className="journey-actions">
-          {userId && userId !== trip.owner_id ? (
+        <div className="journey-side">
+          {userId !== trip.owner_id ? (
             <FollowTrip
               tripId={trip.id}
               slug={trip.slug}
               signedIn={Boolean(userId)}
               initialFollowing={Boolean(followData)}
               initialNotifications={Boolean(followData?.notifications_enabled)}
+              vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY}
             />
           ) : null}
 
-          {userId === trip.owner_id ? (
-            <Link className="ghost-button" href={`/trip/${trip.slug}/edit`}>
-              <Plus size={16} /> Invite travelers
-            </Link>
-          ) : null}
+          <div className="journey-people">
+            <div
+              className="avatar-stack"
+              aria-label={travelers.map((traveler) => traveler.display_name).join(", ")}
+            >
+              {travelers.map((traveler, index) => (
+                <span
+                  key={traveler.id}
+                  title={traveler.display_name}
+                  style={{ backgroundColor: avatarColors[index] }}
+                >
+                  {initials(traveler.display_name)}
+                </span>
+              ))}
+            </div>
+            <p>
+              {travelers.length === 1
+                ? "1 traveler"
+                : `${travelers.length} travelers`}
+            </p>
+          </div>
         </div>
       </section>
 
@@ -688,9 +745,6 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         </Link>
       )}
 
-      {media.length > 0 ? (
-        <TripStory title={trip.name} slug={trip.slug} momentCount={media.length} />
-      ) : null}
     </main>
   );
 }
