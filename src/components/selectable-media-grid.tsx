@@ -2,13 +2,14 @@
 
 import { Check } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRef } from "react";
 
 import { useMediaSelection } from "@/components/media-selection";
 
 export type SelectableMediaItem = { id: string; storagePath: string; thumbnailStoragePath: string | null; url: string; thumbnailUrl: string; caption: string | null; kind: "photo" | "video"; reactions: string[]; canManage: boolean };
 
-export function SelectableMediaGrid({ items, onOpen }: { items: SelectableMediaItem[]; onOpen: (index: number) => void }) {
+export function SelectableMediaGrid({ items, totalCount, moreHref, onOpen }: { items: SelectableMediaItem[]; totalCount: number; moreHref: string; onOpen: (index: number) => void }) {
   const { selected, selecting, toggle } = useMediaSelection();
   const timerRef = useRef<number | null>(null);
   const longPressedRef = useRef(false);
@@ -23,9 +24,11 @@ export function SelectableMediaGrid({ items, onOpen }: { items: SelectableMediaI
     if (longPressedRef.current) { longPressedRef.current = false; return; }
     if (selecting && item.canManage) toggle(selectionItem(item)); else onOpen(index);
   }
+  const hiddenCount = Math.max(0, totalCount - items.length);
   return <div className={`moment-grid real-moments${selecting ? " is-selecting" : ""}`}>{items.map((item, index) => <div className={`moment media-open${selected.has(item.id) ? " is-selected" : ""}`} key={item.id}>
     {item.kind === "photo" || item.thumbnailStoragePath ? <Image src={item.thumbnailUrl} alt={item.caption || (item.kind === "photo" ? "Trip photo" : "Trip video")} fill sizes="(max-width: 800px) 50vw, 33vw" draggable={false} /> : <video src={item.url} muted preload="metadata" draggable={false} />}{item.caption ? <span className="media-caption">{item.caption}</span> : null}
     {item.reactions.length ? <div className="timeline-reactions" aria-label={`${item.reactions.length} ${item.reactions.length === 1 ? "reaction" : "reactions"}`}>{[...new Set(item.reactions)].slice(0, 3).map((emoji) => <span key={emoji}>{emoji}</span>)}<strong>{item.reactions.length}</strong></div> : null}
+    {hiddenCount > 0 && index === items.length - 1 ? <Link className="moment-more" href={moreHref} aria-label={`View all ${totalCount} moments from this day`}>+{hiddenCount}<small>view all</small></Link> : null}
     <button className="media-hit" type="button" aria-label={`${selected.has(item.id) ? "Deselect" : selecting ? "Select" : "Open"} ${item.caption || (item.kind === "photo" ? "photo" : "video")}`} onContextMenu={(event) => event.preventDefault()} onPointerDown={() => beginPress(item)} onPointerUp={endPress} onPointerCancel={endPress} onPointerLeave={endPress} onClick={() => activate(item, index)} />
     {item.canManage ? <button className="media-select-indicator" type="button" aria-label={selected.has(item.id) ? "Deselect moment" : "Select moment"} onClick={() => toggle(selectionItem(item))}>{selected.has(item.id) ? <Check size={15} strokeWidth={3} /> : null}</button> : null}
   </div>)}</div>;

@@ -54,7 +54,6 @@ type Media = {
 
 type Reaction = { media_id: string; emoji: string };
 type Traveler = { id: string; display_name: string };
-type Invitation = { id: string; token: string; expires_at: string };
 type DaySummaryRecord = {
   id: string;
   summary_date: string;
@@ -137,6 +136,40 @@ function mediaDateValue(item: { captured_at: string | null; created_at: string |
   return Number.isNaN(date.getTime()) ? new Date(0) : date;
 }
 
+const SIGNED_MEDIA_BATCH_SIZE = 100;
+const TIMELINE_MEDIA_PREVIEW_SIZE = 5;
+
+async function createSignedMediaUrlMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  paths: string[]
+) {
+  const urls = new Map<string, string | null>();
+
+  for (let start = 0; start < paths.length; start += SIGNED_MEDIA_BATCH_SIZE) {
+    const batch = paths.slice(start, start + SIGNED_MEDIA_BATCH_SIZE);
+    const { data, error } = await supabase.storage
+      .from("trip-media")
+      .createSignedUrls(batch, 3600);
+
+    if (error) {
+      console.error("Failed to create signed URLs for trip media", {
+        start,
+        count: batch.length,
+        message: error.message,
+      });
+
+      for (const path of batch) urls.set(path, null);
+      continue;
+    }
+
+    batch.forEach((path, index) => {
+      urls.set(path, data?.[index]?.signedUrl ?? null);
+    });
+  }
+
+  return urls;
+}
+
 export async function generateMetadata({ params }: PageProps<"/trip/[slug]">) {
   const { slug } = await params;
   const supabase = await createClient();
@@ -173,7 +206,6 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     { data: mediaData },
     { data: memberData },
     { data: userData },
-    { data: reactionData },
     { data: summaryData },
   ] = await Promise.all([
     supabase
@@ -190,13 +222,13 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         "id,uploader_id,storage_path,thumbnail_storage_path,caption,kind,captured_at,created_at,place_name,latitude,longitude"
       )
       .eq("trip_id", trip.id)
-      .order("created_at", { ascending: false }),
+      .order("captured_at", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true }),
 
     supabase.from("trip_members").select("user_id").eq("trip_id", trip.id),
 
     supabase.auth.getUser(),
-
-    supabase.from("reactions").select("media_id,emoji"),
 
     supabase
       .from("day_summaries")
@@ -221,26 +253,39 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
   const media = (mediaData ?? []) as Media[];
 
+  const timelinePreviewIds = new Set<string>();
+  const timelinePreviewCounts = new Map<string, number>();
+
+  for (const item of media) {
+    const dayKey = timelineDateKey(mediaDateValue(item));
+    const count = timelinePreviewCounts.get(dayKey) ?? 0;
+    if (count >= TIMELINE_MEDIA_PREVIEW_SIZE) continue;
+    timelinePreviewIds.add(item.id);
+    timelinePreviewCounts.set(dayKey, count + 1);
+  }
+
+  const { data: reactionData } = timelinePreviewIds.size
+    ? await supabase
+        .from("reactions")
+        .select("media_id,emoji")
+        .in("media_id", [...timelinePreviewIds])
+    : { data: [] };
+
   const mediaPaths = [
     ...new Set(
-      media.flatMap((item) =>
-        [item.storage_path, item.thumbnail_storage_path].filter(
+      media.filter((item) => timelinePreviewIds.has(item.id)).flatMap((item) => {
+        if (item.kind === "photo") {
+          return [item.thumbnail_storage_path ?? item.storage_path];
+        }
+
+        return [item.storage_path, item.thumbnail_storage_path].filter(
           (path): path is string => Boolean(path)
-        )
-      )
+        );
+      })
     ),
   ];
 
-  const signedMedia = mediaPaths.length
-    ? await supabase.storage.from("trip-media").createSignedUrls(mediaPaths, 3600)
-    : { data: [] };
-
-  const mediaUrlByPath = new Map(
-    mediaPaths.map((path, index) => [
-      path,
-      signedMedia.data?.[index]?.signedUrl ?? null,
-    ])
-  );
+  const mediaUrlByPath = await createSignedMediaUrlMap(supabase, mediaPaths);
 
   const reactionsByMedia = new Map<string, string[]>();
   for (const reaction of (reactionData ?? []) as Reaction[]) {
@@ -252,7 +297,12 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
   const mediaWithUrls = media.map((item) => ({
     ...item,
-    url: mediaUrlByPath.get(item.storage_path) ?? null,
+    url:
+      mediaUrlByPath.get(
+        item.kind === "photo"
+          ? item.thumbnail_storage_path ?? item.storage_path
+          : item.storage_path
+      ) ?? null,
     thumbnailUrl:
       mediaUrlByPath.get(item.thumbnail_storage_path ?? item.storage_path) ??
       null,
@@ -354,55 +404,6 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
           .eq("user_id", userId)
           .maybeSingle()
       : { data: null };
-
-  const { data: invitationData } =
-    userId === trip.owner_id
-      ? await supabase
-          .from("trip_invitations")
-          .select("id,token,expires_at")
-          .eq("trip_id", trip.id)
-          .is("revoked_at", null)
-          .gt("expires_at", new Date().toISOString())
-          .order("created_at", { ascending: false })
-      : { data: [] };
-
-  const collaborators = travelers
-    .filter((traveler) => traveler.id !== trip.owner_id)
-    .map((traveler) => ({
-      id: traveler.id,
-      displayName: traveler.display_name,
-    }));
-
-  const invitations = ((invitationData ?? []) as Invitation[]).map(
-    (invitation) => ({
-      id: invitation.id,
-      token: invitation.token,
-      expiresAt: invitation.expires_at,
-    })
-  );
-
-  const storyMoments = mediaWithUrls
-    .filter((item): item is typeof item & { url: string } => Boolean(item.url))
-    .slice()
-    .sort(
-      (a, b) =>
-        mediaDateValue({
-          captured_at: a.captured_at,
-          created_at: null,
-        }).getTime() -
-        mediaDateValue({
-          captured_at: b.captured_at,
-          created_at: null,
-        }).getTime()
-    )
-    .map((moment) => ({
-      id: moment.id,
-      url: moment.url,
-      kind: moment.kind,
-      caption: moment.caption,
-      placeName: moment.place_name,
-      capturedAt: moment.captured_at,
-    }));
 
   return (
     <main className="journey-page">
@@ -624,7 +625,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
                     {day.media.length > 0 ? (
                       <MediaGallery
+                        key={`${dayKey}-${day.media.length}`}
                         slug={trip.slug}
+                        day={dayKey}
                         userId={userId}
                         returnTo={`/trip/${trip.slug}`}
                         items={day.media
@@ -658,6 +661,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                                 created_at: null,
                               }).getTime()
                           )}
+                        totalCount={day.media.length}
                       />
                     ) : null}
                   </div>
@@ -684,8 +688,8 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         </Link>
       )}
 
-      {storyMoments.length > 0 ? (
-        <TripStory title={trip.name} moments={storyMoments} />
+      {media.length > 0 ? (
+        <TripStory title={trip.name} slug={trip.slug} momentCount={media.length} />
       ) : null}
     </main>
   );
