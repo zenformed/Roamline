@@ -83,14 +83,17 @@ function initials(name: string) {
 }
 
 function travelerColors(travelers: Traveler[]) {
-  const used = new Set<number>();
+  const used = new Set<string>();
   return travelers.map((traveler) => {
-    let color =
+    let index =
       [...traveler.id].reduce((sum, char) => sum + char.charCodeAt(0), 0) %
       AVATAR_COLORS.length;
 
+    let color = AVATAR_COLORS[index];
+
     while (used.has(color) && used.size < AVATAR_COLORS.length) {
-      color = (color + 1) % AVATAR_COLORS.length;
+      index = (index + 1) % AVATAR_COLORS.length;
+      color = AVATAR_COLORS[index];
     }
 
     used.add(color);
@@ -366,12 +369,46 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     })
   );
 
-  const storyMoments = mediaWithUrls
+  const normalizedMediaItems = mediaWithUrls
     .filter((item): item is typeof item & { url: string } => Boolean(item.url))
+    .map((item) => ({
+      id: item.id,
+      storagePath: item.storage_path,
+      thumbnailStoragePath: item.thumbnail_storage_path,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl ?? item.url,
+      caption: item.caption,
+      kind: item.kind,
+      capturedAt: item.captured_at,
+      placeName: item.place_name,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      uploaderId: item.uploader_id,
+      canManage: Boolean(userId && userId === item.uploader_id),
+      reactions: reactionsByMedia.get(item.id) ?? [],
+    }));
+
+  const storyMoments = normalizedMediaItems
+    .slice()
     .sort(
       (a, b) =>
-        mediaDateValue(a).getTime() - mediaDateValue(b).getTime()
-    );
+        mediaDateValue({
+          captured_at: a.capturedAt,
+          created_at: null,
+        }).getTime() -
+        mediaDateValue({
+          captured_at: b.capturedAt,
+          created_at: null,
+        }).getTime()
+    )
+    .map((moment) => ({
+      id: moment.id,
+      url: moment.url,
+      kind: moment.kind,
+      caption: moment.caption,
+      placeName: moment.placeName,
+      capturedAt: moment.capturedAt,
+    }));
 
   return (
     <main className="journey-page">
@@ -386,7 +423,10 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         </Link>
 
         <nav className="header-nav">
-          <HeaderNavigation tripSlug={trip.slug} />
+          <HeaderNavigation
+            signedIn={Boolean(userId)}
+            displayName={userId ? travelerById.get(userId)?.display_name ?? null : null}
+          />
           <ThemeToggle />
         </nav>
       </header>
@@ -435,8 +475,10 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
           {userId && userId !== trip.owner_id ? (
             <FollowTrip
               tripId={trip.id}
-              userId={userId}
-              defaultEnabled={Boolean(followData?.notifications_enabled)}
+              slug={trip.slug}
+              signedIn={Boolean(userId)}
+              initialFollowing={Boolean(followData)}
+              initialNotifications={Boolean(followData?.notifications_enabled)}
             />
           ) : null}
 
@@ -478,6 +520,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
               const dayKey = timelineDateKey(day.date);
               const daySummaries = summariesByDate.get(dayKey) ?? [];
               const summaryAuthor = daySummaries[0]?.profiles?.[0];
+              const summaryAuthorId = daySummaries[0]?.author_id;
               const summaryCanContribute = canContribute;
 
               return (
@@ -510,7 +553,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                   </header>
 
                   <div
-                    className={`day-story-card day-post-card${day.checkins.length ? " has-checkins" : ""}${day.media.length ? " has-media" : ""}${!day.checkins.length && !daySummaries.length ? " media-only" : ""}`}
+                    className={`day-story-card day-post-card${day.checkins.length ? " has-checkins" : ""}${day.media.length ? " has-media" : ""}${!day.checkins.length && !daySummaries.length ? " is-empty" : ""}`}
                   >
                     <div className="day-post-copy">
                       {!day.checkins.length && summaryAuthor ? (
@@ -519,8 +562,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                             className="post-avatar"
                             style={{
                               backgroundColor:
-                                avatarColorById.get(summaryAuthor.display_name) ??
-                                "#dce8ff",
+                                summaryAuthorId
+                                  ? avatarColorById.get(summaryAuthorId) ?? "#dce8ff"
+                                  : "#dce8ff",
                             }}
                           >
                             {initials(summaryAuthor.display_name)}
@@ -539,16 +583,26 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                         return (
                           <CheckinCard
                             key={checkin.id}
+                            checkin={{
+                              id: checkin.id,
+                              placeId: checkin.place_id,
+                              placeName: checkin.place_name,
+                              address: checkin.formatted_address,
+                              note: checkin.note,
+                              occurredAt: checkin.occurred_at,
+                              latitude: checkin.latitude,
+                              longitude: checkin.longitude,
+                            }}
+                            canManage={canContribute && userId === checkin.author_id}
                             slug={trip.slug}
                             postStyle
                             authorId={checkin.author_id}
                             authorName={author?.display_name ?? "Traveler"}
-                            placeName={checkin.place_name}
-                            formattedAddress={checkin.formatted_address}
-                            note={checkin.note}
-                            occurredAt={checkin.occurred_at}
-                            latitude={checkin.latitude}
-                            longitude={checkin.longitude}
+                            authorColor={
+                              avatarColorById.get(checkin.author_id) ?? "#dce8ff"
+                            }
+                            travelers={travelers}
+                            attendeeIds={attendeesByCheckin.get(checkin.id) ?? []}
                           />
                         );
                       })}
@@ -558,6 +612,12 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                           tripId={trip.id}
                           slug={trip.slug}
                           date={dayKey}
+                          summaries={daySummaries.map((summary) => ({
+                            id: summary.id,
+                            authorId: summary.author_id,
+                            authorName: summary.profiles[0]?.display_name ?? "Traveler",
+                            body: summary.body,
+                          }))}
                           canContribute={summaryCanContribute}
                           userId={userId}
                           userName={
@@ -578,10 +638,32 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                             (item): item is typeof item & { url: string } =>
                               Boolean(item.url)
                           )
+                          .map((item) => ({
+                            id: item.id,
+                            storagePath: item.storage_path,
+                            thumbnailStoragePath: item.thumbnail_storage_path,
+                            url: item.url,
+                            thumbnailUrl: item.thumbnailUrl ?? item.url,
+                            caption: item.caption,
+                            kind: item.kind,
+                            capturedAt: item.captured_at,
+                            placeName: item.place_name,
+                            latitude: item.latitude,
+                            longitude: item.longitude,
+                            uploaderId: item.uploader_id,
+                            canManage: Boolean(userId && userId === item.uploader_id),
+                            reactions: reactionsByMedia.get(item.id) ?? [],
+                          }))
                           .sort(
                             (a, b) =>
-                              mediaDateValue(a).getTime() -
-                              mediaDateValue(b).getTime()
+                              mediaDateValue({
+                                captured_at: a.capturedAt,
+                                created_at: null,
+                              }).getTime() -
+                              mediaDateValue({
+                                captured_at: b.capturedAt,
+                                created_at: null,
+                              }).getTime()
                           )}
                       />
                     ) : null}
@@ -609,7 +691,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
         </Link>
       )}
 
-      {storyMoments.length > 0 ? <TripStory moments={storyMoments} /> : null}
+      {storyMoments.length > 0 ? (
+        <TripStory title={trip.name} moments={storyMoments} />
+      ) : null}
     </main>
   );
 }
