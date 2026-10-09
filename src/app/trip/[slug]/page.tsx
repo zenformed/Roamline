@@ -242,14 +242,6 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     ])
   );
 
-  const mediaWithUrls = media.map((item) => ({
-    ...item,
-    url: mediaUrlByPath.get(item.storage_path) ?? null,
-    thumbnailUrl:
-      mediaUrlByPath.get(item.thumbnail_storage_path ?? item.storage_path) ??
-      null,
-  }));
-
   const reactionsByMedia = new Map<string, string[]>();
   for (const reaction of (reactionData ?? []) as Reaction[]) {
     reactionsByMedia.set(reaction.media_id, [
@@ -257,6 +249,15 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
       reaction.emoji,
     ]);
   }
+
+  const mediaWithUrls = media.map((item) => ({
+    ...item,
+    url: mediaUrlByPath.get(item.storage_path) ?? null,
+    thumbnailUrl:
+      mediaUrlByPath.get(item.thumbnail_storage_path ?? item.storage_path) ??
+      null,
+    reactions: reactionsByMedia.get(item.id) ?? [],
+  }));
 
   const travelerIds = [
     ...new Set([trip.owner_id, ...(memberData ?? []).map((member) => member.user_id)]),
@@ -298,7 +299,15 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
   const dayMap = new Map<
     string,
-    { date: Date; checkins: Checkin[]; media: typeof mediaWithUrls }
+    {
+      date: Date;
+      checkins: Checkin[];
+      media: Array<
+        typeof mediaWithUrls[number] & {
+          reactions: string[];
+        }
+      >;
+    }
   >();
 
   for (const checkin of checkins) {
@@ -313,7 +322,10 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     const date = mediaDateValue(item);
     const key = timelineDateKey(date);
     const day = dayMap.get(key) ?? { date, checkins: [], media: [] };
-    day.media.push(item);
+    day.media.push({
+      ...item,
+      reactions: item.reactions ?? [],
+    });
     dayMap.set(key, day);
   }
 
@@ -369,35 +381,17 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     })
   );
 
-  const normalizedMediaItems = mediaWithUrls
+  const storyMoments = mediaWithUrls
     .filter((item): item is typeof item & { url: string } => Boolean(item.url))
-    .map((item) => ({
-      id: item.id,
-      storagePath: item.storage_path,
-      thumbnailStoragePath: item.thumbnail_storage_path,
-      url: item.url,
-      thumbnailUrl: item.thumbnailUrl ?? item.url,
-      caption: item.caption,
-      kind: item.kind,
-      capturedAt: item.captured_at,
-      placeName: item.place_name,
-      latitude: item.latitude,
-      longitude: item.longitude,
-      uploaderId: item.uploader_id,
-      canManage: Boolean(userId && userId === item.uploader_id),
-      reactions: reactionsByMedia.get(item.id) ?? [],
-    }));
-
-  const storyMoments = normalizedMediaItems
     .slice()
     .sort(
       (a, b) =>
         mediaDateValue({
-          captured_at: a.capturedAt,
+          captured_at: a.captured_at,
           created_at: null,
         }).getTime() -
         mediaDateValue({
-          captured_at: b.capturedAt,
+          captured_at: b.captured_at,
           created_at: null,
         }).getTime()
     )
@@ -406,8 +400,8 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
       url: moment.url,
       kind: moment.kind,
       caption: moment.caption,
-      placeName: moment.placeName,
-      capturedAt: moment.capturedAt,
+      placeName: moment.place_name,
+      capturedAt: moment.captured_at,
     }));
 
   return (
@@ -650,9 +644,8 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                             placeName: item.place_name,
                             latitude: item.latitude,
                             longitude: item.longitude,
-                            uploaderId: item.uploader_id,
                             canManage: Boolean(userId && userId === item.uploader_id),
-                            reactions: reactionsByMedia.get(item.id) ?? [],
+                            reactions: item.reactions ?? [],
                           }))
                           .sort(
                             (a, b) =>
