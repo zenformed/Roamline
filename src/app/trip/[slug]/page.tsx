@@ -682,7 +682,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
                     {day.media.length > 0 ? (
                       <MediaGallery
-                        key={`${dayKey}-${day.media.length}`}
+                        key={`${dayKey}-${day.media.length}-${viewerTimeZone}`}
                         slug={trip.slug}
                         day={dayKey}
                         userId={userId}
@@ -732,6 +732,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
       {canContribute ? (
         <AddMoment
+          key={viewerTimeZone}
           tripId={trip.id}
           slug={trip.slug}
           currentUserId={userId!}
