@@ -22,18 +22,23 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const day = request.nextUrl.searchParams.get("day") ?? "";
+  const requestedStart = new Date(request.nextUrl.searchParams.get("start") ?? "");
+  const requestedEnd = new Date(request.nextUrl.searchParams.get("end") ?? "");
   const requestedOffset = Number(request.nextUrl.searchParams.get("offset") ?? 0);
   const offset = Number.isSafeInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0;
+  const rangeDuration = requestedEnd.getTime() - requestedStart.getTime();
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+  if (
+    Number.isNaN(requestedStart.getTime()) ||
+    Number.isNaN(requestedEnd.getTime()) ||
+    rangeDuration <= 0 ||
+    rangeDuration > 48 * 60 * 60 * 1000
+  ) {
     return NextResponse.json({ error: "Choose a valid day." }, { status: 400 });
   }
 
-  const start = new Date(`${day}T00:00:00.000Z`).toISOString();
-  const endDate = new Date(`${day}T00:00:00.000Z`);
-  endDate.setUTCDate(endDate.getUTCDate() + 1);
-  const end = endDate.toISOString();
+  const start = requestedStart.toISOString();
+  const end = requestedEnd.toISOString();
   const supabase = await createClient();
   const [{ data: trip, error: tripError }, { data: userData }] = await Promise.all([
     supabase.from("trips").select("id,owner_id,visibility").eq("slug", slug).maybeSingle(),
@@ -55,9 +60,9 @@ export async function GET(
     if (!membership) return NextResponse.json({ error: "Journey not found." }, { status: 404 });
   }
 
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("media")
-    .select("id,uploader_id,kind,storage_path,thumbnail_storage_path,caption,captured_at,place_name,latitude,longitude")
+    .select("id,uploader_id,kind,storage_path,thumbnail_storage_path,caption,captured_at,place_name,latitude,longitude", { count: "exact" })
     .eq("trip_id", trip.id)
     .or(`and(captured_at.gte.${start},captured_at.lt.${end}),and(captured_at.is.null,created_at.gte.${start},created_at.lt.${end})`)
     .order("captured_at", { ascending: true, nullsFirst: false })
@@ -94,6 +99,8 @@ export async function GET(
   }
 
   return NextResponse.json({
+    totalCount: count ?? 0,
+    nextOffset: offset + media.length,
     items: media.flatMap((item) => {
       const thumbnailPath = item.thumbnail_storage_path ?? item.storage_path;
       const thumbnailUrl = urlByPath.get(thumbnailPath);

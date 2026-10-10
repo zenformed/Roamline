@@ -143,7 +143,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
   const checkinInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"compose" | "upload" | "checkin">("compose");
   const [summary, setSummary] = useState("");
-  const [momentOccurredAt, setMomentOccurredAt] = useState(() => localDateTime());
+  const [momentOccurredAt, setMomentOccurredAt] = useState("");
   const [items, setItems] = useState<UploadItem[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -181,6 +181,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
   function openComposer() {
     setMode("compose");
     setMessage("");
+    setMomentOccurredAt(localDateTime());
     dialogRef.current?.showModal();
   }
 
@@ -191,7 +192,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
 
   async function publishSummary() {
     const body = summary.trim();
-    if (!body) return;
+    if (!body || !momentOccurredAt) return;
     setBusy(true); setMessage("");
     const summaryDate = momentOccurredAt.slice(0, 10);
     const result = await saveDaySummary(tripId, slug, summaryDate, body, new Date(momentOccurredAt).toISOString());
@@ -240,6 +241,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
     if (!files?.length) return;
     const capturedFiles = [...files];
     setMode("upload");
+    setMomentOccurredAt(localDateTime());
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     document.documentElement.classList.add("camera-capture-active");
     await new Promise((resolve) => window.setTimeout(resolve, 250));
@@ -352,10 +354,10 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
     <dialog className="moment-dialog" ref={dialogRef} onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => { setMessage(""); document.documentElement.classList.remove("camera-capture-active"); }}>
       <div className="dialog-head"><div>{mode !== "compose" && !publishingIds.length ? <button className="composer-back" type="button" onClick={() => setMode("compose")}><ArrowLeft size={17} /> {mode === "upload" ? "Add Photos/Videos" : "Check in"}</button> : <><span className="section-kicker">{slug}</span><h2>{publishingIds.length ? "Publishing moments" : "Create moment"}</h2></>}</div><button className="icon-button" type="button" aria-label={mode === "compose" || publishingIds.length ? "Close" : "Close and return to Create Moment"} disabled={busy} onClick={closeCurrentView}><X size={19} /></button></div>
       {mode === "compose" ? <section className="moment-composer">
-        <div className="moment-composer-author"><span>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("") || "T"}</span><div><strong>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name || "Traveler"}</strong><button type="button" onClick={() => dateTimeDialogRef.current?.showModal()}>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(momentOccurredAt))}<CalendarDays size={13} /></button></div></div>
+        <div className="moment-composer-author"><span>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("") || "T"}</span><div><strong>{travelers.find((traveler) => traveler.id === currentUserId)?.display_name || "Traveler"}</strong><button type="button" onClick={() => dateTimeDialogRef.current?.showModal()}>{momentOccurredAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(momentOccurredAt)) : "Choose date and time"}<CalendarDays size={13} /></button></div></div>
         <textarea autoFocus maxLength={2000} placeholder="Summarize your day…" value={summary} onChange={(event) => setSummary(event.target.value)} />
         <div className="moment-composer-bar"><span>Add to your moment</span><div><button type="button" aria-label="Add photos or videos" title="Photos and videos" onClick={() => setMode("upload")}><ImagePlus size={22} /></button>{travelers.some((traveler) => traveler.id !== currentUserId) ? <CompanionPicker compact travelers={travelers.filter((traveler) => traveler.id !== currentUserId)} selectedIds={companionIds} onChange={setCompanionIds} /> : null}<button type="button" aria-label="Add a location" title="Location" onClick={() => setMode("checkin")}><MapPin size={22} /></button></div></div>
-        <button className="primary-button moment-composer-publish" type="button" disabled={busy || !summary.trim()} onClick={() => void publishSummary()}>{busy ? <LoaderCircle className="spin" size={16} /> : null} Post</button>
+        <button className="primary-button moment-composer-publish" type="button" disabled={busy || !summary.trim() || !momentOccurredAt} onClick={() => void publishSummary()}>{busy ? <LoaderCircle className="spin" size={16} /> : null} Post</button>
       </section> : mode === "upload" ? <div>
         {publishingIds.length ? <section className="upload-progress-panel" aria-live="polite">
           <div className="upload-progress-icon"><Upload size={22} /></div>
@@ -377,7 +379,7 @@ export function AddMoment({ tripId, slug, currentUserId, travelers }: Props) {
         <label><span>Place name</span><input name="placeName" required maxLength={180} placeholder="Eorzea Cafe" value={selectedPlace.name} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", name: event.target.value }))} /></label>
         <label><span>Address</span><input name="address" placeholder="Akihabara, Tokyo" value={selectedPlace.address} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", address: event.target.value }))} /></label>
         <div className="coordinate-grid"><label><span>Latitude</span><input name="latitude" required type="number" min="-90" max="90" step="any" placeholder="35.6984" value={selectedPlace.latitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", latitude: event.target.value }))} /></label><label><span>Longitude</span><input name="longitude" required type="number" min="-180" max="180" step="any" placeholder="139.7731" value={selectedPlace.longitude} onChange={(event) => setSelectedPlace((current) => ({ ...current, id: "", longitude: event.target.value }))} /></label></div>
-        <label><span>Date and time</span><input name="occurredAt" required type="datetime-local" defaultValue={localDateTime()} /></label>
+        <label><span>Date and time</span><input name="occurredAt" required type="datetime-local" value={momentOccurredAt} onChange={(event) => setMomentOccurredAt(event.target.value)} /></label>
         <label><span>Note (optional)</span><textarea name="note" maxLength={1200} placeholder="What happened here?" /></label>
         <div className="checkin-attachments"><button className="location-button" type="button" onClick={() => checkinInputRef.current?.click()}><Paperclip size={15} /> Add photos or videos</button><input ref={checkinInputRef} hidden type="file" accept="image/*,video/*,.heic,.heif" multiple onChange={(event) => { if (event.target.files) setCheckinFiles((current) => [...current, ...[...event.target.files!].filter((file) => isAcceptedFile(file) && file.size <= (file.type.startsWith("video/") ? MAX_SOURCE_VIDEO_SIZE : MAX_UPLOAD_SIZE))]); event.target.value = ""; }} />{checkinFiles.length ? <div className="attachment-list">{checkinFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" aria-label={`Remove ${file.name}`} onClick={() => setCheckinFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={13} /></button></span>)}</div> : <p className="place-help">Optional · select multiple photos or videos</p>}</div>
         <button className="primary-button publish-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <MapPin size={16} />} Add check-in</button>

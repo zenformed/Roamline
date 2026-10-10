@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, MapPin, Pencil } from "lucide-react";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { AddMoment } from "@/components/add-moment";
@@ -13,6 +14,12 @@ import { MediaSelectionProvider } from "@/components/media-selection";
 import { TripStory } from "@/components/trip-story";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { createClient } from "@/lib/supabase/server";
+import {
+  dateKeyInTimeZone,
+  formatInTimeZone,
+  normalizeTimeZone,
+  VIEWER_TIME_ZONE_COOKIE,
+} from "@/lib/time-zone";
 
 type Trip = {
   id: string;
@@ -116,19 +123,6 @@ function tripDates(start: string | null, end: string | null) {
   return formatter.format(new Date(`${start ?? end}T12:00:00`));
 }
 
-function timelineDateKey(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-
-  return `${value("year")}-${value("month")}-${value("day")}`;
-}
-
 function mediaDateValue(item: { captured_at: string | null; created_at: string | null }) {
   const raw = item.captured_at ?? item.created_at ?? "";
   if (!raw) return new Date(0);
@@ -188,6 +182,10 @@ export async function generateMetadata({ params }: PageProps<"/trip/[slug]">) {
 
 export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
   const { slug } = await params;
+  const cookieStore = await cookies();
+  const viewerTimeZone = normalizeTimeZone(
+    cookieStore.get(VIEWER_TIME_ZONE_COOKIE)?.value
+  );
   const supabase = await createClient();
 
   const { data: tripData } = await supabase
@@ -258,7 +256,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
   const timelinePreviewCounts = new Map<string, number>();
 
   for (const item of media) {
-    const dayKey = timelineDateKey(mediaDateValue(item));
+    const dayKey = dateKeyInTimeZone(mediaDateValue(item), viewerTimeZone);
     const count = timelinePreviewCounts.get(dayKey) ?? 0;
     if (count >= TIMELINE_MEDIA_PREVIEW_SIZE) continue;
     timelinePreviewIds.add(item.id);
@@ -363,7 +361,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
   for (const checkin of checkins) {
     const date = new Date(checkin.occurred_at);
-    const key = timelineDateKey(date);
+    const key = dateKeyInTimeZone(date, viewerTimeZone);
     const day = dayMap.get(key) ?? { date, checkins: [], media: [] };
     day.checkins.push(checkin);
     dayMap.set(key, day);
@@ -371,7 +369,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
   for (const item of mediaWithUrls) {
     const date = mediaDateValue(item);
-    const key = timelineDateKey(date);
+    const key = dateKeyInTimeZone(date, viewerTimeZone);
     const day = dayMap.get(key) ?? { date, checkins: [], media: [] };
     day.media.push({
       ...item,
@@ -390,9 +388,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     }
   }
 
-  const timelineDays = [...dayMap.values()].sort(
-    (a, b) => b.date.getTime() - a.date.getTime()
-  );
+  const timelineDays = [...dayMap.entries()]
+    .map(([key, day]) => ({ ...day, key }))
+    .sort((a, b) => b.key.localeCompare(a.key));
 
   const userId = userData.user?.id ?? null;
 
@@ -569,7 +567,8 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
             </div>
           ) : (
             timelineDays.map((day) => {
-              const dayKey = timelineDateKey(day.date);
+              const dayKey = day.key;
+              const dayLabelDate = new Date(`${dayKey}T12:00:00Z`);
               const daySummaries = summariesByDate.get(dayKey) ?? [];
               const summaryAuthor = daySummaries[0]?.profiles?.[0];
               const summaryAuthorId = daySummaries[0]?.author_id;
@@ -580,22 +579,22 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                   <header className="day-heading">
                     <div className="date-tile">
                       <strong>
-                        {new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(
-                          day.date
-                        )}
+                        {formatInTimeZone(dayLabelDate, "UTC", {
+                          day: "numeric",
+                        })}
                       </strong>
                       <span>
-                        {new Intl.DateTimeFormat("en-US", { month: "short" }).format(
-                          day.date
-                        )}
+                        {formatInTimeZone(dayLabelDate, "UTC", {
+                          month: "short",
+                        })}
                       </span>
                     </div>
 
                     <div className="day-heading-copy">
                       <h2>
-                        {new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(
-                          day.date
-                        )}
+                        {formatInTimeZone(dayLabelDate, "UTC", {
+                          weekday: "long",
+                        })}
                       </h2>
 
                       {day.checkins.length || day.media.length ? (
@@ -655,6 +654,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                             }
                             travelers={travelers}
                             attendeeIds={attendeesByCheckin.get(checkin.id) ?? []}
+                            timeZone={viewerTimeZone}
                           />
                         );
                       })}
@@ -719,6 +719,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                               }).getTime()
                           )}
                         totalCount={day.media.length}
+                        timeZone={viewerTimeZone}
                       />
                     ) : null}
                   </div>

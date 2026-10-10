@@ -1,11 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ArrowUpRight, ChevronLeft, ChevronRight, MapPin, Plus, Sparkles } from "lucide-react";
 
 import { SiteHeader } from "@/components/site-header";
 import { TripLibrary } from "@/components/trip-library";
 import { createClient } from "@/lib/supabase/server";
+import {
+  dateKeyInTimeZone,
+  normalizeTimeZone,
+  VIEWER_TIME_ZONE_COOKIE,
+} from "@/lib/time-zone";
 
 type TripSummary = { id: string; owner_id: string; slug: string; name: string; description: string | null; start_date: string | null; end_date: string | null; visibility: "public" | "unlisted" | "private"; status: "draft" | "published" | "archived"; published_at: string | null };
 type TripPhoto = { trip_id: string; storage_path: string; thumbnail_storage_path: string | null; caption: string | null; captured_at: string | null; created_at: string };
@@ -20,10 +26,9 @@ function formatDateRange(start: string | null, end: string | null) {
   return formatter.format(new Date(`${start ?? end}T12:00:00`));
 }
 
-function tripPhase(trip: TripSummary) {
+function tripPhase(trip: TripSummary, today: string) {
   if (trip.status === "draft") return { label: "Draft", live: false };
   if (trip.status === "archived") return { label: "Archived", live: false };
-  const today = new Date().toISOString().slice(0, 10);
   if (trip.start_date && today < trip.start_date) return { label: "Upcoming", live: false };
   if (trip.end_date && today > trip.end_date) return { label: "Past journey", live: false };
   if (trip.start_date && (!trip.end_date || today <= trip.end_date)) return { label: "Happening now", live: true };
@@ -54,6 +59,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
   const query = (params.q ?? "").trim().slice(0, 100);
   const page = parsePage(params.page);
   const from = (page - 1) * TRIPS_PER_PAGE;
+  const cookieStore = await cookies();
+  const viewerTimeZone = normalizeTimeZone(
+    cookieStore.get(VIEWER_TIME_ZONE_COOKIE)?.value
+  );
+  const today = dateKeyInTimeZone(new Date(), viewerTimeZone);
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub ?? null;
@@ -105,7 +115,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
       {error ? <div className="library-state"><h3>Trips couldn’t be loaded</h3><p>Refresh the page to try again.</p></div> : trips.length === 0 ? <div className="library-state"><span className="state-mark"><MapPin size={22} /></span><h3>{query ? "No matching trips" : scope === "mine" ? "Your travel shelf is ready" : "No public trips yet"}</h3><p>{query ? "Try another trip name." : scope === "mine" ? "Create a journey or accept an invitation to see it here." : "Check back when a new journey begins."}</p>{!query && (signedIn ? <Link className="primary-button" href="/trips/new"><Plus size={16} /> Create your first trip</Link> : <Link className="primary-button" href="/login?mode=signup">Create an account <ArrowUpRight size={16} /></Link>)}</div> : <>
         <TripLibrary>{trips.map((trip, tripIndex) => {
           const tripPhotos = (selectedPhotos.get(trip.id) ?? []).map((photo) => ({ photo, url: urlByPath.get(photo.thumbnail_storage_path ?? photo.storage_path) })).filter((item): item is { photo: TripPhoto; url: string } => Boolean(item.url));
-          const phase = tripPhase(trip);
+          const phase = tripPhase(trip, today);
           return <article className="journey-showcase" data-trip-name={trip.name} key={trip.id}><div className="showcase-heading"><div><span className="section-kicker">{phase.label}</span><h3>{trip.name}</h3></div><Link href={`/trip/${trip.slug}`} className="quiet-link">Open journey <ArrowUpRight size={15} /></Link></div><Link className="featured-trip" href={`/trip/${trip.slug}`}>
             {tripPhotos.length ? <div className={`featured-collage photo-count-${tripPhotos.length}`}>{tripPhotos.map(({ photo, url }, photoIndex) => <div className={`featured-photo featured-photo-${photoIndex + 1}`} key={photo.storage_path}><Image src={url} alt={photo.caption || `${trip.name} trip photo`} fill priority={tripIndex === 0 && photoIndex === 0} sizes="(max-width: 768px) 100vw, 70vw" /></div>)}</div> : <div className="featured-fallback cover-contour" />}
             <div className="featured-shade" /><div className={`live-pill${phase.live ? " is-live" : ""}`}><span /> {phase.label}</div><div className="featured-content"><div><p className="featured-date">{formatDateRange(trip.start_date, trip.end_date).toUpperCase()}</p><h3>{trip.name}</h3><p className="featured-route"><MapPin size={16} /> {trip.description || "The next journey is taking shape."}</p></div><div className="featured-meta"><span>{momentCountByTrip.get(trip.id) ?? 0} moments</span><span className="circle-arrow"><ChevronRight size={20} /></span></div></div>
