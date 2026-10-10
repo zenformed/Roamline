@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import {
@@ -9,8 +8,6 @@ import {
 } from "@/lib/time-zone";
 
 export function TimeZoneSync({ storedTimeZone }: { storedTimeZone: string }) {
-  const router = useRouter();
-
   useEffect(() => {
     function syncTimeZone() {
       const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -28,7 +25,7 @@ export function TimeZoneSync({ storedTimeZone }: { storedTimeZone: string }) {
 
       const secure = window.location.protocol === "https:" ? "; Secure" : "";
       document.cookie = `${VIEWER_TIME_ZONE_COOKIE}=${encodeURIComponent(browserTimeZone)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
-      router.refresh();
+      window.location.reload();
     }
 
     function syncWhenVisible() {
@@ -44,7 +41,7 @@ export function TimeZoneSync({ storedTimeZone }: { storedTimeZone: string }) {
       window.removeEventListener("focus", syncTimeZone);
       document.removeEventListener("visibilitychange", syncWhenVisible);
     };
-  }, [router, storedTimeZone]);
+  }, [storedTimeZone]);
 
   return null;
 }
