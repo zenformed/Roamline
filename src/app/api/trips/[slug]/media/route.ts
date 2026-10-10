@@ -77,7 +77,7 @@ export async function GET(
   const media = (data ?? []) as DayMedia[];
   const paths = media.flatMap((item) => {
     const thumbnail = item.thumbnail_storage_path ?? item.storage_path;
-    return item.kind === "video" ? [thumbnail, item.storage_path] : [thumbnail];
+    return [thumbnail, item.storage_path];
   });
   const uniquePaths = [...new Set(paths)];
   const { data: signed, error: signingError } = uniquePaths.length
@@ -104,7 +104,7 @@ export async function GET(
     items: media.flatMap((item) => {
       const thumbnailPath = item.thumbnail_storage_path ?? item.storage_path;
       const thumbnailUrl = urlByPath.get(thumbnailPath);
-      const url = item.kind === "video" ? urlByPath.get(item.storage_path) : thumbnailUrl;
+      const url = urlByPath.get(item.storage_path);
       return url && thumbnailUrl ? [{
         id: item.id,
         storagePath: item.storage_path,

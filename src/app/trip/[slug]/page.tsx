@@ -274,7 +274,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     ...new Set(
       media.filter((item) => timelinePreviewIds.has(item.id)).flatMap((item) => {
         if (item.kind === "photo") {
-          return [item.thumbnail_storage_path ?? item.storage_path];
+          return [item.storage_path, item.thumbnail_storage_path].filter(
+            (path): path is string => Boolean(path)
+          );
         }
 
         return [item.storage_path, item.thumbnail_storage_path].filter(
@@ -298,9 +300,7 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     ...item,
     url:
       mediaUrlByPath.get(
-        item.kind === "photo"
-          ? item.thumbnail_storage_path ?? item.storage_path
-          : item.storage_path
+        item.storage_path
       ) ?? null,
     thumbnailUrl:
       mediaUrlByPath.get(item.thumbnail_storage_path ?? item.storage_path) ??

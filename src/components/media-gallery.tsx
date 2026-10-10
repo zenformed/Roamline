@@ -1,7 +1,6 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, LoaderCircle, MapPin, MessageCircle, Pencil, Save, Send, Trash2, X } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
@@ -10,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { refreshTrip } from "@/app/trip/[slug]/actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SelectableMediaGrid } from "@/components/selectable-media-grid";
+import { ZoomablePhoto } from "@/components/zoomable-photo";
 import { dateTimeLocalInTimeZone, formatInTimeZone } from "@/lib/time-zone";
 
 type MediaItem = { id: string; storagePath: string; thumbnailStoragePath: string | null; url: string; thumbnailUrl: string; caption: string | null; kind: "photo" | "video"; capturedAt: string | null; placeName: string | null; latitude: number | null; longitude: number | null; reactions: string[]; canManage: boolean };
@@ -35,6 +35,15 @@ export function MediaGallery({ items, totalCount, userId, returnTo, slug, day, t
   const activeBase = activeIndex === null ? null : items[activeIndex];
   const active = activeBase ? { ...activeBase, ...mediaOverrides[activeBase.id] } : null;
   const activeId = active?.id ?? null;
+
+  useEffect(() => {
+    if (activeIndex === null) return;
+    for (const item of [items[activeIndex - 1], items[activeIndex + 1]]) {
+      if (!item || item.kind !== "photo") continue;
+      const image = new window.Image();
+      image.src = item.url;
+    }
+  }, [activeIndex, items]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -139,7 +148,7 @@ export function MediaGallery({ items, totalCount, userId, returnTo, slug, day, t
   return <>
     <SelectableMediaGrid items={timelineItems} totalCount={totalCount} moreHref={`/trip/${encodeURIComponent(slug)}/day/${day}`} onOpen={open} />
     <dialog className="media-viewer" ref={dialogRef} onClose={() => setActiveIndex(null)} onKeyDown={(event) => { if (event.key === "ArrowLeft") move(-1); if (event.key === "ArrowRight") move(1); }}>
-      {active ? <div className="viewer-layout"><div className="viewer-stage">{active.kind === "photo" ? <Image src={active.thumbnailUrl} alt={active.caption || active.placeName || "Trip photo"} fill sizes="75vw" priority /> : <video src={active.url} controls autoPlay playsInline />}<button className="viewer-close" type="button" aria-label="Close viewer" onClick={() => dialogRef.current?.close()}><X size={20} /></button>{items.length > 1 ? <><button className="viewer-nav previous" type="button" aria-label="Previous media" onClick={() => move(-1)}><ChevronLeft size={22} /></button><button className="viewer-nav next" type="button" aria-label="Next media" onClick={() => move(1)}><ChevronRight size={22} /></button></> : null}</div><aside className="viewer-sidebar">
+      {active ? <div className="viewer-layout"><div className="viewer-stage">{active.kind === "photo" ? <ZoomablePhoto key={active.id} src={active.url} alt={active.caption || active.placeName || "Trip photo"} priority onSwipe={items.length > 1 ? move : undefined} /> : <video src={active.url} controls autoPlay playsInline />}<button className="viewer-close" type="button" aria-label="Close viewer" onClick={() => dialogRef.current?.close()}><X size={20} /></button>{items.length > 1 ? <><button className="viewer-nav previous" type="button" aria-label="Previous media" onClick={() => move(-1)}><ChevronLeft size={22} /></button><button className="viewer-nav next" type="button" aria-label="Next media" onClick={() => move(1)}><ChevronRight size={22} /></button></> : null}</div><aside className="viewer-sidebar">
         {editing ? <form className="media-edit-form" onSubmit={saveMedia}><span className="section-kicker">EDIT MOMENT</span><label><span>Title or caption</span><input name="caption" maxLength={500} defaultValue={active.caption ?? ""} /></label><label><span>Place</span><input name="placeName" maxLength={180} defaultValue={active.placeName ?? ""} /></label><label><span>Date and time</span><input name="capturedAt" type="datetime-local" defaultValue={active.capturedAt ? dateTimeLocalInTimeZone(active.capturedAt, timeZone) : ""} /></label><div className="coordinate-grid"><label><span>Latitude</span><input name="latitude" type="number" min="-90" max="90" step="any" defaultValue={active.latitude ?? ""} /></label><label><span>Longitude</span><input name="longitude" type="number" min="-180" max="180" step="any" defaultValue={active.longitude ?? ""} /></label></div><div className="editor-actions"><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancel</button><button className="primary-button" disabled={managing}>{managing ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Save</button></div></form> : <><div><div className="viewer-title-row"><span className="section-kicker">MOMENT {activeIndex! + 1} OF {items.length}</span>{active.canManage ? <div><button type="button" aria-label="Edit moment" onClick={() => setEditing(true)}><Pencil size={15} /></button><button type="button" aria-label="Delete moment" disabled={managing} onClick={() => void deleteMedia()}><Trash2 size={15} /></button></div> : null}</div><h2>{active.caption || "Untitled moment"}</h2>{active.placeName ? <p className="viewer-place"><MapPin size={14} /> {active.placeName}</p> : null}{active.capturedAt ? <p className="viewer-date">{formatInTimeZone(active.capturedAt, timeZone, { dateStyle: "medium", timeStyle: "short" })}</p> : null}</div><div className="reaction-row">{counts.map(({ emoji, count }) => userId ? <button type="button" className={reactions.some((reaction) => reaction.user_id === userId && reaction.emoji === emoji) ? "active" : ""} key={emoji} onClick={() => void react(emoji)}><span>{emoji}</span>{count ? <small>{count}</small> : null}</button> : count ? <span className="reaction-count" key={emoji}>{emoji} {count}</span> : null)}</div><section className="comments"><h3><MessageCircle size={15} /> Comments <span>{comments.length}</span></h3>{loading ? <div className="comments-loading"><LoaderCircle className="spin" size={18} /></div> : comments.length ? <div className="comment-list">{comments.map((comment) => <article key={comment.id}><div className="comment-head"><strong>{comment.profiles?.display_name || "Traveler"}</strong>{comment.author_id === userId ? <button type="button" aria-label="Delete comment" onClick={() => void deleteComment(comment)}><Trash2 size={13} /></button> : null}</div><p>{comment.body}</p><time>{formatInTimeZone(comment.created_at, timeZone, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time></article>)}</div> : <p className="comments-empty">No comments yet.</p>}{userId ? <form className="comment-form" onSubmit={addComment}><input name="comment" required maxLength={1200} aria-label="Add a comment" placeholder="Add a comment…" /><button type="submit" disabled={sending} aria-label="Post comment">{sending ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />}</button></form> : <Link className="comment-login" href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in to react or comment</Link>}</section></>}{error ? <p className="viewer-error" role="alert">{error}</p> : null}
       </aside></div> : null}
     </dialog>
