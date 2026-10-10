@@ -340,8 +340,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
 
   const summariesByDate = new Map<string, DaySummaryRecord[]>();
   for (const summary of (summaryData ?? []) as DaySummaryRecord[]) {
-    summariesByDate.set(summary.summary_date, [
-      ...(summariesByDate.get(summary.summary_date) ?? []),
+    const dayKey = dateKeyInTimeZone(summary.occurred_at, viewerTimeZone);
+    summariesByDate.set(dayKey, [
+      ...(summariesByDate.get(dayKey) ?? []),
       summary,
     ]);
   }
@@ -378,10 +379,10 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     dayMap.set(key, day);
   }
 
-  for (const [summaryDate] of summariesByDate) {
+  for (const [summaryDate, summaries] of summariesByDate) {
     if (!dayMap.has(summaryDate)) {
       dayMap.set(summaryDate, {
-        date: new Date(`${summaryDate}T12:00:00`),
+        date: new Date(summaries[0].occurred_at),
         checkins: [],
         media: [],
       });
@@ -393,6 +394,11 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
     .sort((a, b) => b.key.localeCompare(a.key));
 
   const userId = userData.user?.id ?? null;
+  const userSummaryDates = new Set(
+    ((summaryData ?? []) as DaySummaryRecord[])
+      .filter((summary) => summary.author_id === userId)
+      .map((summary) => summary.summary_date)
+  );
 
   const { data: followData } =
     userId && userId !== trip.owner_id
@@ -659,8 +665,9 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                         );
                       })}
 
-                      {daySummaries.length > 0 ? (
+                      {daySummaries.length > 0 || summaryCanContribute ? (
                         <DaySummary
+                          key={`${dayKey}-${viewerTimeZone}-${daySummaries.map((summary) => summary.id).join("-")}`}
                           tripId={trip.id}
                           slug={trip.slug}
                           date={dayKey}
@@ -669,8 +676,10 @@ export default async function TripPage({ params }: PageProps<"/trip/[slug]">) {
                             authorId: summary.author_id,
                             authorName: summary.profiles[0]?.display_name ?? "Traveler",
                             body: summary.body,
+                            summaryDate: summary.summary_date,
                           }))}
                           canContribute={summaryCanContribute}
+                          canCreate={summaryCanContribute && Boolean(userId) && !userSummaryDates.has(dayKey)}
                           userId={userId}
                           userName={
                             travelers.find((traveler) => traveler.id === userId)

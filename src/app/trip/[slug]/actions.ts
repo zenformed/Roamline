@@ -14,10 +14,10 @@ export async function refreshTrip(slug: string) {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-export async function saveDaySummary(tripId: string, slug: string, summaryDate: string, body: string, occurredAt?: string) {
+export async function saveDaySummary(tripId: string, slug: string, summaryDate: string, body: string, occurredAt?: string, summaryId?: string) {
   const cleanBody = body.trim();
   const parsedOccurredAt = occurredAt ? new Date(occurredAt) : null;
-  if (!UUID_PATTERN.test(tripId) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || !DATE_PATTERN.test(summaryDate) || !cleanBody || cleanBody.length > 2000 || (parsedOccurredAt && Number.isNaN(parsedOccurredAt.getTime()))) return { error: "Enter a summary of up to 2,000 characters." };
+  if (!UUID_PATTERN.test(tripId) || (summaryId && !UUID_PATTERN.test(summaryId)) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || !DATE_PATTERN.test(summaryDate) || !cleanBody || cleanBody.length > 2000 || (parsedOccurredAt && Number.isNaN(parsedOccurredAt.getTime()))) return { error: "Enter a summary of up to 2,000 characters." };
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { error: "Sign in to summarize this day." };
@@ -29,10 +29,12 @@ export async function saveDaySummary(tripId: string, slug: string, summaryDate: 
     updated_at: new Date().toISOString(),
     ...(parsedOccurredAt ? { occurred_at: parsedOccurredAt.toISOString() } : {}),
   };
-  const { data, error } = await supabase.from("day_summaries").upsert(values, { onConflict: "trip_id,summary_date,author_id" }).select("id,body,author_id,summary_date,occurred_at").single();
-  if (error || !data) return { error: "Your day summary could not be saved." };
+  const result = summaryId
+    ? await supabase.from("day_summaries").update({ body: cleanBody, updated_at: values.updated_at }).eq("id", summaryId).eq("trip_id", tripId).eq("author_id", userData.user.id).select("id,body,author_id,summary_date,occurred_at").single()
+    : await supabase.from("day_summaries").insert(values).select("id,body,author_id,summary_date,occurred_at").single();
+  if (result.error || !result.data) return { error: result.error?.code === "23505" ? "You already summarized this day. Edit the existing summary instead." : "Your day summary could not be saved." };
   revalidatePath(`/trip/${slug}`);
-  return { summary: data };
+  return { summary: result.data };
 }
 
 export async function deleteDaySummary(summaryId: string, slug: string) {
